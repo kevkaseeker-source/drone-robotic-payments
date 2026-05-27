@@ -1,0 +1,29 @@
+import os
+
+PIXHAWK_CONNECTION = os.getenv("PIXHAWK_CONNECTION", "/dev/serial0")
+PIXHAWK_BAUD = int(os.getenv("PIXHAWK_BAUD", "57600"))
+
+# Drone operator pubkey — used by PC server (no keypair file needed on Windows)
+DRONE_OPERATOR_PUBKEY = os.getenv("DRONE_OPERATOR_PUBKEY", "D7bPfAfRpAaYst6ec9GMbTtRmSi9uDZzXe5E41r9NndN")
+
+ARRIVAL_RADIUS_M = float(os.getenv("ARRIVAL_RADIUS_M", "13.0"))
+
+TARGET_LAT = float(os.getenv("TARGET_LAT", "52.3609"))
+TARGET_LON = float(os.getenv("TARGET_LON", "14.0600"))
+
+SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.devnet.solana.com")
+WALLET_KEYPAIR_PATH = os.getenv("WALLET_KEYPAIR_PATH", "/home/kevkaakvek/.config/solana/id.json")
+
+DRONE_PROGRAM_ID = os.getenv(
+    "DRONE_PROGRAM_ID",
+    "3NmsWVX39uvzG3PBNPdSe4FTgudqSeLphJSbMDhV5F8Y",
+)
+
+# Seller wallet pubkey — set this after running: solana-keygen new --outfile ~/seller.json
+# Then: solana address --keypair ~/seller.json
+SELLER_PUBKEY = os.getenv("SELLER_PUBKEY", "7v8TjCEV3n4n6wEQDESaKyyAbCM5c1uijiQNdoCWddbg")
+
+DELIVERY_AMOUNT_SOL = float(os.getenv("DELIVERY_AMOUNT_SOL", "0.20"))
+DEADLINE_MINUTES = int(os.getenv("DEADLINE_MINUTES", "30"))
+
+TELEMETRY_POLL_INTERVAL = float(os.getenv("TELEMETRY_POLL_INTERVAL", "1.0"))
