@@ -88,9 +88,9 @@ The drone delivery concept was developed before the Turbin3 DePIN Cohort:
 
 ## Turbin3 DePIN Cohort — Q4 2025
 
-Participating in the [Solana Turbin3 DePIN Cohort](https://github.com/solana-turbin3/drone-delivery-powered-by-depin) together with **Hsien Hsiu Liao** and **Eduardo Ramirez** strongly advanced this project — from concept to working on-chain smart contract. The cohort provided the Solana/Anchor foundation that this hardware integration builds on.
+Participating in the [Solana Turbin3 DePIN Cohort](https://github.com/solana-turbin3/drone-delivery-powered-by-depin) together with **Hsien Hsiu Liao** and **Eduardo Ramirez** strongly advanced this project — from concept to working on-chain smart contract. The cohort was a major inspiration for bringing this idea to life on Solana.
 
-The current implementation extends the cohort work with full hardware integration: Raspberry Pi 4, Pixhawk flight controller, M8N GPS, 4G LTE via Staex SIM, and real MAVLink telemetry.
+The current implementation adds full hardware integration on top: Raspberry Pi 4, Pixhawk flight controller, M8N GPS, 4G LTE via Staex SIM, and real MAVLink telemetry.
 
 ---
 
@@ -130,7 +130,7 @@ Both transactions are publicly verifiable on [Solana Explorer (Devnet)](https://
 
 | | |
 |---|---|
-| **[Staex](https://staex.io)** | IoT SIM card — secure 4G connectivity for the drone hardware |
+| **[Staex](https://github.com/staex-io)** | IoT SIM card — secure 4G connectivity for the drone hardware |
 | **[Solana](https://solana.com)** | RoboticPayments layer — autonomous GPS-triggered escrow release, no human approval required |
 
 ---
