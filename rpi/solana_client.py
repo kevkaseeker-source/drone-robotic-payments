@@ -45,7 +45,7 @@ class SolanaClient:
         return pda
 
     def confirm_delivery(self, actual_lat: float, actual_lon: float, timestamp: int = None) -> str:
-        """GPS-verified payment release: escrow → seller."""
+        """GPS-verified payment release: escrow → seller. Retries up to 3x with backoff."""
         ts = int(timestamp or time.time())
         data = (CONFIRM_DELIVERY_DISC
                 + struct.pack("<qqq", int(actual_lat * 1e7), int(actual_lon * 1e7), ts))
@@ -55,16 +55,33 @@ class SolanaClient:
 
         accounts = [
             AccountMeta(pubkey=escrow_pda, is_signer=False, is_writable=True),
-            AccountMeta(pubkey=self._keypair.pubkey(), is_signer=True, is_writable=False),
+            AccountMeta(pubkey=self._keypair.pubkey(), is_signer=True, is_writable=True),
             AccountMeta(pubkey=seller, is_signer=False, is_writable=True),
         ]
         ix = Instruction(program_id=self._program_id, accounts=accounts, data=data)
-        blockhash = self._rpc.get_latest_blockhash().value.blockhash
-        msg = Message.new_with_blockhash([ix], self._keypair.pubkey(), blockhash)
-        tx = Transaction([self._keypair], msg, blockhash)
-        sig = str(self._rpc.send_transaction(tx).value)
-        log.info("confirm_delivery TX: %s", sig)
-        return sig
+
+        # Build and send TX exactly once — reuse signature on confirmation retries
+        # to avoid double-payment from duplicate transactions.
+        try:
+            blockhash = self._rpc.get_latest_blockhash().value.blockhash
+            msg = Message.new_with_blockhash([ix], self._keypair.pubkey(), blockhash)
+            tx = Transaction([self._keypair], msg, blockhash)
+            sig = str(self._rpc.send_transaction(tx).value)
+            log.info("confirm_delivery TX sent: %s", sig)
+        except Exception as e:
+            raise RuntimeError(f"confirm_delivery send failed: {e}")
+
+        for attempt in range(1, 4):
+            try:
+                if self.confirm_transaction(sig):
+                    return sig
+                log.warning("TX not confirmed on attempt %d, retrying confirmation...", attempt)
+            except Exception as e:
+                log.warning("confirm_transaction attempt %d error: %s", attempt, e)
+            if attempt < 3:
+                time.sleep(2 ** attempt)
+
+        raise RuntimeError(f"confirm_delivery TX sent but not confirmed after 3 attempts: {sig}")
 
     def close_escrow(self) -> str:
         """Close delivered escrow and reclaim rent to drone operator."""

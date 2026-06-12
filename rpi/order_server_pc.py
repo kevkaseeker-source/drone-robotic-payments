@@ -9,8 +9,11 @@ Start:
 """
 import json
 import logging
+import os
 from flask import Flask, jsonify, request, send_from_directory
 import config as cfg
+
+INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "robopay-dev-2026")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("order_server_pc")
@@ -19,6 +22,7 @@ app = Flask(__name__)
 
 _active_order = None  # dict or None
 _force_delivery = False
+_rpi_logs = []  # last 100 log lines from RPi4
 
 
 @app.route("/")
@@ -60,6 +64,7 @@ def place_order():
         "status": "drone_dispatched",
         "delivery_tx": None,
     }
+    global _force_delivery
     _force_delivery = False
     return jsonify({"success": True, "tx": escrow_tx, "lat": lat, "lon": lon})
 
@@ -96,6 +101,9 @@ def force_delivery_status():
 @app.route("/simulate_arrival", methods=["POST"])
 def simulate_arrival():
     global _force_delivery, _active_order
+    if request.headers.get("X-Token") != INTERNAL_TOKEN:
+        log.warning("simulate_arrival: unauthorized attempt from %s", request.remote_addr)
+        return jsonify({"error": "unauthorized"}), 401
     data = request.get_json() or {}
     lat = data.get("lat")
     lon = data.get("lon")
@@ -118,6 +126,23 @@ def status():
     if _active_order:
         return jsonify(_active_order)
     return jsonify({"status": "no_order"})
+
+
+@app.route("/rpi_log", methods=["POST"])
+def rpi_log():
+    global _rpi_logs
+    data = request.get_json() or {}
+    msg = data.get("msg", "").strip()
+    if msg:
+        _rpi_logs.append(msg)
+        if len(_rpi_logs) > 100:
+            _rpi_logs.pop(0)
+    return jsonify({"ok": True})
+
+
+@app.route("/rpi_logs")
+def get_rpi_logs():
+    return jsonify({"logs": _rpi_logs})
 
 
 if __name__ == "__main__":

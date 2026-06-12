@@ -1,7 +1,8 @@
 import os
 
 PIXHAWK_CONNECTION = os.getenv("PIXHAWK_CONNECTION", "/dev/serial0")
-PIXHAWK_BAUD = int(os.getenv("PIXHAWK_BAUD", "57600"))
+PIXHAWK_BAUD = int(os.getenv("PIXHAWK_BAUD", "115200"))
+HAT_GPS_PORT = os.getenv("HAT_GPS_PORT", "/dev/ttyUSB2")
 
 # Drone operator pubkey — used by PC server (no keypair file needed on Windows)
 DRONE_OPERATOR_PUBKEY = os.getenv("DRONE_OPERATOR_PUBKEY", "D7bPfAfRpAaYst6ec9GMbTtRmSi9uDZzXe5E41r9NndN")
@@ -11,6 +12,8 @@ ARRIVAL_RADIUS_M = float(os.getenv("ARRIVAL_RADIUS_M", "13.0"))
 TARGET_LAT = float(os.getenv("TARGET_LAT", "52.3609"))
 TARGET_LON = float(os.getenv("TARGET_LON", "14.0600"))
 
+# Helius free tier (empfohlen): https://dev.helius.xyz → App erstellen → Devnet → API Key kopieren
+# Dann env var setzen: SOLANA_RPC_URL=https://devnet.helius-rpc.com/?api-key=DEIN_KEY
 SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.devnet.solana.com")
 WALLET_KEYPAIR_PATH = os.getenv("WALLET_KEYPAIR_PATH", "/home/kevkaakvek/.config/solana/id.json")
 
@@ -24,6 +27,6 @@ DRONE_PROGRAM_ID = os.getenv(
 SELLER_PUBKEY = os.getenv("SELLER_PUBKEY", "7v8TjCEV3n4n6wEQDESaKyyAbCM5c1uijiQNdoCWddbg")
 
 DELIVERY_AMOUNT_SOL = float(os.getenv("DELIVERY_AMOUNT_SOL", "0.20"))
-DEADLINE_MINUTES = int(os.getenv("DEADLINE_MINUTES", "30"))
+DEADLINE_MINUTES = int(os.getenv("DEADLINE_MINUTES", "60"))
 
 TELEMETRY_POLL_INTERVAL = float(os.getenv("TELEMETRY_POLL_INTERVAL", "1.0"))
