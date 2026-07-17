@@ -1,5 +1,25 @@
-﻿*.json
+# Python
 __pycache__/
 *.pyc
-.env
+*.egg-info/
+.pytest_cache/
+venv/
 drone-env/
+
+# Environment & Secrets
+.env
+*.key
+*.pem
+
+# Solana / Anchor
+target/
+
+# JSON (keypairs etc.)
+*.json
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
