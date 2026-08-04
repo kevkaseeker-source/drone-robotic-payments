@@ -108,7 +108,7 @@ class SolanaClient:
                 if status.err is not None:
                     log.error("TX failed on-chain: %s", status.err)
                     return False
-                if status.confirmation_status:
+                if status.confirmation_status in ("confirmed", "finalized"):
                     return True
             time.sleep(2.0)
         log.warning("TX confirmation timeout: %s", signature)
