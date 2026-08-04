@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 venv/
 drone-env/
+rpi/FIX_ANLEITUNG.md
 
 # Environment & Secrets
 .env
