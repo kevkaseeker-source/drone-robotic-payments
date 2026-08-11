@@ -328,6 +328,14 @@
 
 <p><strong>Network Architecture.</strong> All three nodes communicate via a Staex MCC (Mesh Companion Container) tunnel, establishing encrypted peer-to-peer connections without requiring any node to hold a public IP address. Units B and C additionally maintain a 4G LTE data connection via the Waveshare SIM HAT, used to submit transactions to the Solana RPC endpoint (Helius, Devnet). The Solana RPC connection is HTTPS-based and independent of the MCC tunnel.</p>
 
+<h3 id="arch-6-3">6.3 Software Architecture</h3>
+<p>The software stack consists of five components &#x2014; four Python modules running on the Raspberry Pi and one Rust smart contract deployed on Solana.</p>
+<p><strong><code>config.py</code></strong> centralises all runtime parameters. GPS port, wallet path, RPC URL, target coordinates, geofence radius, and deadline are read from environment variables with safe defaults, ensuring no secrets are hardcoded and all parameters can be changed without modifying source code.</p>
+<p><strong><code>pixhawk_bridge.py</code></strong> provides GPS hardware abstraction through two classes. <code>PixhawkBridge</code> reads position data from a Pixhawk flight controller via MAVLink, used in the indoor PoC. <code>HATGPSBridge</code> reads GPS from the Waveshare SIM7600X HAT via AT+CGPSINFO on /dev/ttyUSB2, used in the outdoor prototype. Both expose the same <code>get_gps()</code> interface, making them interchangeable in the main program.</p>
+<p><strong><code>solana_client.py</code></strong> handles all blockchain interaction &#x2014; constructing and signing <code>create_delivery</code> and <code>confirm_delivery</code> transactions, submitting them to the Solana RPC, and polling for confirmation status.</p>
+<p><strong><code>main.py</code></strong> is the orchestration loop: it initialises the GPS source, polls for a valid fix, evaluates the Haversine geofence condition on each reading, and calls <code>confirm_delivery</code> upon arrival at the target coordinate.</p>
+<p><strong><code>lib.rs</code></strong> (Anchor smart contract) implements the on-chain escrow logic in Rust. It was developed and deployed to Solana Devnet via Solana Playground. The contract defines two instructions &#x2014; <code>create_delivery</code> and <code>confirm_delivery</code> &#x2014; and enforces GPS proximity on-chain via a degE7 bounding box check.</p>
+<p>The separation into distinct modules reflects the separation of concerns: hardware, blockchain, configuration, and orchestration are each independently testable and replaceable.</p>
 <h2 id="chapter-7">7. Prototype Development</h2>
 <h3 id="poc-7-1">7.1 Indoor PoC — Original Hardware Setup</h3>
 
