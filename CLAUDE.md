@@ -41,26 +41,28 @@ Existing chapter IDs: `chapter-1` (Introduction), `chapter-7` (Prototype Develop
 
 ## Chapter Assignments
 
-| # | Title | Author | Status |
+| # | Title | Author | Subsections |
 |---|---|---|---|
-| 1 | Introduction | Kevin | ✓ Done |
-| 2 | Literature Review | TBD | Not started |
-| 3 | Theoretical Framework | TBD | Not started |
-| 4 | Research Methodology | TBD | Not started |
-| 5 | System Requirements | TBD | Not started |
-| 6 | System Architecture | Kevin | ✓ Done |
-| 7 | Prototype Development | Kevin | ✓ Done |
-| 8 | Payment Mechanisms | TBD | Not started |
-| 9 | Experimental Design | TBD | Not started |
-| 10 | Experimental Results | TBD | Not started |
-| 11 | Comparative Evaluation | TBD | Not started |
-| 12 | Security Analysis | TBD | Not started |
-| 13 | Reliability and Robustness | TBD | Not started |
-| 14 | Legal, Ethical and Societal Implications | TBD | Not started |
-| 15 | Business and Economic Analysis | TBD | Not started |
-| 16 | Discussion | TBD | Not started |
-| 17 | Future Work | TBD | Not started |
-| 18 | Conclusion | TBD | Not started |
+| 1 | Introduction | Kevin | 1.1 Background · 1.2 Problem Statement · 1.3 Research Gap · 1.7 Hypotheses · 1.8 Scope · 1.9 Contributions · 1.10 Methodology · 1.11 Structure |
+| 2 | Literature Review | TBD | TBD |
+| 3 | Theoretical Framework | TBD | TBD |
+| 4 | Research Methodology | **Xinyan** | 4.1 Philosophy · 4.2 Design · 4.3 Mixed-Method · 4.4 Lit. Review · 4.5 Prototype Dev · 4.6 Experimental Design · 4.7 Expert Interviews · 4.8 Questionnaire · 4.9 Data Collection · 4.10 Data Analysis · 4.11 Ethics · 4.12 Threats to Validity |
+| 5 | System Requirements | **Xinyan** | 5.1 Functional · 5.2 Non-Functional · 5.3 User · 5.4 Machine · 5.5 Security · 5.6 Regulatory |
+| 6 | System Architecture | Kevin | 6.1 Overall · 6.2 Hardware · 6.3 Software · 6.4 Blockchain & Payment & Data Flow |
+| 7 | Prototype Development | Kevin (partial) | 7.1–7.8 (existing) · 7.9–7.13 TBD |
+| 8 | Payment Mechanisms | TBD | 8.1 Traditional · 8.2 GPS-Triggered · 8.3 AI Agent · 8.4 x402 · 8.5 Escrow · 8.6 Event-Driven · 8.7 Comparative |
+| 9 | Experimental Design | TBD | 9.1 Environment · 9.2 Indoor · 9.3 Outdoor · 9.4 Scenarios · 9.5 Success Criteria · 9.6–9.10 Metrics & Testing |
+| 10 | Experimental Results | TBD | 10.1 TX Performance · 10.2 GPS Accuracy · 10.3–10.9 Comm/Blockchain/Payment/Energy/Latency/Failure/Stats |
+| 11 | Comparative Evaluation | TBD | 11.1 GPS vs x402 · 11.2 Autonomous vs Human · 11.3 Blockchain vs Traditional · 11.4 Solana vs Alternatives · 11.5 Related Work · 11.6 Cost |
+| 12 | Security Analysis | **Yash** | 12.1 Threat Model · 12.2 GPS Spoofing · 12.3 Wallet · 12.4 Key Protection · 12.5 Smart Contract · 12.6–12.10 Network/Replay/Sybil/AI/Mitigation |
+| 13 | Reliability and Robustness | TBD | 13.1 Fault Tolerance · 13.2 Recovery · 13.3 Redundancy · 13.4 Scalability · 13.5 Availability · 13.6 Maintainability |
+| 14 | Legal, Ethical & Societal | **Yash** | 14.1 Legal Personhood · 14.2 Liability · 14.3 Human Oversight · 14.4 Privacy · 14.5 Regulatory · 14.6 Ethics · 14.7 Employment · 14.8 Acceptance |
+| 15 | Business & Economic Analysis | **Yash** | 15.1 Market · 15.2 Business Models · 15.3 Cost-Benefit · 15.4 SWOT · 15.5 Barriers · 15.6 Industry · 15.7 Economic Impact · 15.8 Future Market |
+| 16 | Discussion | TBD | 16.1 Results · 16.2 Research Contributions · 16.3 Scientific · 16.4 Technical · 16.5 Practical · 16.6 Limitations · 16.7 Lessons |
+| 17 | Future Work | TBD | 17.1 Autonomous Drone · 17.2 AI-Agent · 17.3 Multi-Agent · 17.4 Cross-Chain · 17.5 Marketplaces · 17.6 Machine Identity · 17.7 Large-Scale |
+| 18 | Conclusion | TBD | 18.1 Summary · 18.2 Answers to RQ · 18.3 Contributions · 18.4 Closing |
+
+*Detailed breakdown & GitLab work items: https://docs.google.com/document/d/1wvbvqWtbmJVxRuOWr4nrCI1FpnJ7VJlhOxUPSsQWCwc/edit*
 
 ## How to Contribute a Chapter (for Yash, Xinyan, and others)
 
