@@ -37,15 +37,15 @@ The paper is a single HTML file. Every chapter follows this pattern:
 ```
 
 New chapters are inserted **before** the line `<h2>References</h2>`.  
-Existing chapter IDs: `chapter-1` (Introduction), `chapter-7` (Prototype Development).
+Existing chapter IDs: `chapter-1` (Introduction), `chapter-2` (Theoretical Foundations), `chapter-6` (System Architecture), `chapter-7` (Prototype Development).
 
 ## Chapter Assignments
 
 | # | Title | Author | Subsections |
 |---|---|---|---|
 | 1 | Introduction | Kevin | 1.1 Background · 1.2 Problem Statement · 1.3 Research Gap · 1.7 Hypotheses · 1.8 Scope · 1.9 Contributions · 1.10 Methodology · 1.11 Structure |
-| 2 | Literature Review | TBD | TBD |
-| 3 | Theoretical Framework | TBD | TBD |
+| 2 | Theoretical Foundations | **Xinyan** | 2.1 Machine Economy · 2.2 AI Agents and Autonomous Systems · 2.3 Blockchain Technology, Smart Contracts and Escrow · 2.4 Machine Identity · 2.5 M2M Communication · 2.6 Autonomous Payment Systems · 2.7 Solana as Settlement Layer · 2.8 x402 Protocol vs GPS-Based Localization · 2.9 Security Foundations |
+| 3 | Literature Review | **Yash** | 3.0 Purpose, Method and Structure · 3.1 Machine Economy Research · 3.2 Autonomous Robotics · 3.3 AI Agent Economy · 3.4 Blockchain-Based Payments · 3.5 Autonomous Delivery Systems · 3.6 Internet of Drones · 3.7 Digital Identity for AI Agents · 3.8 Machine Trust · 3.9 Existing Payment Architectures · 3.10 Comparative Analysis · 3.11 Identified Research Gap |
 | 4 | Research Methodology | **Xinyan** | 4.1 Philosophy · 4.2 Design · 4.3 Mixed-Method · 4.4 Lit. Review · 4.5 Prototype Dev · 4.6 Experimental Design · 4.7 Expert Interviews · 4.8 Questionnaire · 4.9 Data Collection · 4.10 Data Analysis · 4.11 Ethics · 4.12 Threats to Validity |
 | 5 | System Requirements | **Xinyan** | 5.1 Functional · 5.2 Non-Functional · 5.3 User · 5.4 Machine · 5.5 Security · 5.6 Regulatory |
 | 6 | System Architecture | Kevin | 6.1 Overall · 6.2 Hardware · 6.3 Software · 6.4 Blockchain & Payment & Data Flow |
