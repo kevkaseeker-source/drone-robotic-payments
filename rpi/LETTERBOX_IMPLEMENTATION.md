@@ -1,85 +1,165 @@
-# Letterbox Node — Implementation Guide
+# Smart Letterbox — Implementation Guide
 
-Author: Xinyan (Hardware & Mechatronics) | Device: RPi 4B 2GB | Purpose: the second autonomous machine in the two-machine demo
+Author: Xinyan (Hardware & Mechatronics) | Audience: all team members
+Scope: this document describes the **baseline version** of the smart letterbox
+— a single node that opens upon arrival of a delivery machine. Section 8
+outlines the extension path towards multi-machine coordination.
 
 ---
 
-## 1. Architecture: two parallel links (revised to current state)
+## 1. Purpose
+
+The smart letterbox is a conventional wall-mounted letterbox augmented with a
+small computer. It performs four functions:
+
+1. receives a notification ("a delivery machine has arrived"),
+2. opens its door autonomously,
+3. verifies that the door is physically open (via a contact sensor),
+4. reports the confirmation back, which serves as the trigger for payment.
+
+The letterbox constitutes the **second autonomous machine** in the project
+demo: the carrier (machine 1) approaches the box, the box (machine 2) opens,
+and the payment settles automatically. No human interaction is required at
+any point.
+
+## 2. System Overview
 
 ```
-Carrier (RPi 4 + SIM7600E-H, existing)          Letterbox (RPi 4B + servo, NEW)
-    |                                               |
-    |-- Link 1 (COMMS) -----------------------------|
-    |    GPS arrival -> notify server -> letterbox  |
-    |    receives "arrived" -> opens door -> micro  |
-    |    switch confirms -> reports "opened"        |
-    |                                               |
-    +-- Link 2 (PAYMENT): carrier signs Solana tx -> escrow release |
+Machine 1 (carrier; existing: RPi + 4G)        Machine 2 (letterbox; new)
+   |                                                |
+   |--- "arrived" (message over network) ---------->|  opens door
+   |                                                |  verifies door state
+   |<--- "opened" (confirmation) -------------------|
+   |                                                |
+   +-- payment (Solana escrow; existing code) ------+
 ```
 
-IMPORTANT current state: the repo code has **no Staex SDK integration yet**.
-Communication today is ngrok + Flask server (main.py polls a PC server).
-So proceed in two steps:
-- MVP (get it working first): reuse the existing Flask server; the letterbox polls it too — zero new dependencies, can be up in days
-- Final form: switch to Staex MCC point-to-point tunnel (requires SDK + 2nd Staex SIM from Kevin / Prof. Mikityuk)
+In the baseline version the messages travel through the existing server
+(the one already used by main.py). A later migration to the Staex private
+network is possible without changes to the letterbox logic, since the
+message protocol remains identical.
 
-## 2. Shopping list (Conrad / Amazon, indicative prices)
+## 3. Bill of Materials
 
-| Item | Notes | Price |
+| Item | Description | Price |
 |---|---|---|
-| Servo MG996R-class (13 kg metal gear) | door-opening power; 2-pack on Amazon ~EUR 18 | ~9-18 EUR |
-| Micro switch | door-open detection, ~EUR 3 | ~3 EUR |
-| Jumper wires (male-female) | wiring | ~5 EUR |
-| Breadboard (optional) | handy for first-time debugging | ~5 EUR |
-| 5V PSU (second USB charger) | dedicated servo power | have/8 EUR |
-| Wall-mount letterbox | off-the-shelf Briefkasten | 15-30 EUR |
-| 5V relay module (backup option) | only if moving to magnetic-lock plan B | ~5 EUR |
+| Servo motor, MG996R-class (metal gear) | a small motor that rotates to a commanded angle; drives the door opening | ~9-18 EUR |
+| Micro switch | a contact sensor that closes an electrical circuit when pressed; detects the open door | ~3 EUR |
+| Jumper wires | short connecting wires | ~5 EUR |
+| Letterbox | any wall-mounted model | 15-30 EUR |
+| Second 5V USB power supply | dedicated servo power (mandatory; see section 5) | available / 8 EUR |
 
-Already owned: RPi 4B, SD card, PSU, card reader.
-Buy first: servo + micro switch + jumper wires (~25-30 EUR). Everything else
-only after the logic is proven.
+Available: Raspberry Pi 4B, SD card, power supply.
+Initial purchase: servo, micro switch, jumper wires (~25-30 EUR). The
+letterbox itself can be acquired once the control logic is validated.
 
-## 3. Mechanics: how "servo rotates 90°" becomes "door opens"
+## 4. Mechanical Design
 
-Core trio: hinge + return spring + drive point.
+Objective: a servo rotates 90 degrees and pushes the door open; a spring
+returns the door to the closed position.
 
-Plan A (recommended, start here):
-- Mount the letterbox door on regular hinges
-- Fix the servo to the inner wall of the box; servo horn (cross metal arm) faces the door
-- At 90° the horn pushes the door open (door must be light: acrylic / thin sheet metal)
-- Attach a tension spring inside: after opening, the spring pulls the door back to closed (when the servo returns, the door closes itself)
+Implementation (baseline):
+- The door is mounted on standard hinges.
+- The servo is fixed to the inner wall of the box, its horn aligned with the door.
+- Rotation of the servo drives the horn against the door, opening it.
+- A tension spring inside the box returns the door when the servo releases.
 
-Key point: the contact between horn and door is the tricky part — a small screw + washer as a push rod works fine.
-Do NOT build a complex linkage first; validate the logic with a direct "horn pushes door" setup.
+The door must be lightweight (acrylic or thin sheet metal). A direct-drive
+configuration is sufficient for the baseline; complex linkage mechanisms are
+explicitly deferred. If the door load exceeds the servo torque, a magnetic
+lock serves as the fallback (section 9).
 
-Plan B (backup): 12V magnetic lock + relay — lock holds the door, releases on signal, gravity/spring pops it open. Needs an extra 12V supply; do not buy yet.
+## 5. Electrical Wiring
 
-## 4. Wiring (critical — read carefully)
+Servo (3 wires):
+- Red — external 5V positive (servo power supply)
+- Brown/black — ground (common ground with the Pi required)
+- Yellow/orange (signal) — GPIO 18 (BCM numbering; physical pin 12)
 
-Servo, 3 wires:
-- Red → external 5V positive (servo power)
-- Brown/black → GND (must share ground with the Pi!)
-- Orange/yellow (signal) → GPIO 18 (BCM numbering, physical pin 12)
+Micro switch (2 connections):
+- Common — Pi ground
+- Normally-open — GPIO 17 (physical pin 11)
 
-Micro switch, 3 pins:
-- COM (common) → Pi GND
-- NO (normally open) → GPIO 17 (BCM, physical pin 11)
-- NC (normally closed) → not connected
+> ⚠️ Critical constraint: the servo must be powered from a **separate** 5V
+> supply, never from the Raspberry Pi's pins. The servo can draw up to 2.5 A
+> transiently, which exceeds the Pi's pin ratings and can damage the board.
+> The two supplies must share a common ground for reliable signal levels.
 
-! WARNINGS:
-- NEVER power the servo from the Pi's 3.3V or 5V pins! MG996R peaks at 2.5 A; the Pi's 5V rail cannot handle it and the board can be damaged.
-- Servo power comes from a separate 5V source (USB charger or 5V UBEC from battery); its ground MUST be tied to the Pi's GND (common ground), otherwise the signal is not recognized.
-- The signal wire can go to the pass-through header pins on top of the SIM7600 HAT (Waveshare HAT pins are usually pass-through).
+## 6. Software
 
-## 5. Code (letterbox node, mirrors main.py)
+The letterbox node runs a continuous polling loop:
 
-Install on the Pi (via SSH):
 ```
-sudo apt install -y python3-gpiozero
-pip3 install --user requests
+loop:
+    query server: "is there an arrival event for this box?"
+    if event present:
+        actuate servo -> door opens
+        read micro switch -> is the door physically open?
+        report to server: "opened: yes/no"
+    wait 2 seconds; repeat
 ```
 
-Create `letterbox_node.py`:
+The complete implementation (~40 lines, appendix) mirrors the structure of
+the carrier's main.py and is therefore familiar to team members who have
+worked with the existing code.
+
+Server-side changes (Kevin or the agent): three new endpoints are required —
+one to record the "arrived" event, one polled by the letterbox, and one
+receiving the "opened" confirmation. The carrier signs the payment
+transaction only after a positive confirmation.
+
+## 7. Test Procedure
+
+1. Servo test: a three-line script actuates the servo; verifies wiring and power.
+2. Switch test: the micro switch is pressed manually; the state change is observed.
+3. Full-flow simulation: an "arrived" event is triggered manually on the
+   server; the letterbox opens and reports back. This validates the complete loop.
+4. Integration: the carrier approaches for real; GPS arrival triggers the chain.
+5. Outdoor demo: full operation over 4G.
+
+Each step is a prerequisite for the next.
+
+## 8. Extension Path: from Single Letterbox to Multi-Machine Coordination
+
+The baseline is deliberately minimal. Its significance lies in the fact that
+the same node generalizes into a component of a machine economy:
+
+- **Carrier independence.** The message protocol does not depend on the
+  carrier type. The ground vehicle (Unit C) and, in a later stage, the drone
+  (Unit B) use the same "arrive -> open -> confirm -> pay" sequence.
+- **Multiple letterboxes.** Each box carries an identifier; a delivery
+  targets a specific box_id, and only that box responds. The server logic
+  scales to fleets without structural change.
+- **Authentication.** The box can verify the arriving machine (e.g. QR code
+  presented by the carrier, or a credential in the message) before opening,
+  preventing unauthorized triggering. This contributes to the security
+  analysis in the paper.
+- **Agent-based decision making** (paper section 17.2). The hard-coded rule
+  ("arrive -> open") can be replaced by an agent that authorizes the delivery
+  after checking order data, carrier reputation, and escrow state. The
+  letterbox then acts as the executor of agent decisions.
+- **Physical confirmation remains the trust anchor.** Independent of future
+  extensions, the micro-switch signal ("the door is physically open") remains
+  the basis of the confirmation chain — the project's research differentiator,
+  already present in the baseline.
+
+## 9. Known Pitfalls
+
+- Servo power: dedicated supply plus common ground (the critical constraint
+  of section 5).
+- Metal letterbox enclosures attenuate mobile signals; the 4G antenna must
+  be routed outside.
+- Excessive door weight stalls the servo; keep the door light or adopt the
+  magnetic-lock fallback.
+- The micro switch must sense the door state, not the servo state; physical
+  verification is the project's core principle.
+- Each test stage must pass before the next is attempted.
+
+---
+*Next action: acquire servo, micro switch, jumper wires; perform test steps
+1-2. Server endpoints: request the three routes from the agent or Kevin.*
+
+## Appendix: Letterbox Node Code (letterbox_node.py)
 
 ```python
 #!/usr/bin/env python3
@@ -93,13 +173,13 @@ BOX_ID = "letterbox-1"
 POLL_INTERVAL_S = 2.0
 
 servo = Servo(18)               # signal wire -> GPIO18
-door_switch = Button(17)        # micro switch -> GPIO17 (pull-up default, pressed = open)
+door_switch = Button(17)        # micro switch -> GPIO17 (pull-up default; pressed = open)
 
 def open_door():
     print("opening door...")
     servo.max()                  # rotate to open position (90 deg)
     sleep(2.5)
-    servo.min()                  # back to closed (spring pulls door shut)
+    servo.min()                  # return to closed position (spring pulls door shut)
     print("door cycle done")
 
 def main():
@@ -114,7 +194,7 @@ def main():
                     print(">>> arrived event received")
                     open_door()
                     opened = door_switch.is_pressed
-                    print(f">>>> door physically open: {opened}")
+                    print(f">>> door physically open: {opened}")
                     requests.post(f"{SERVER_URL}/letterbox_report",
                                   json={"box": BOX_ID, "opened": opened},
                                   timeout=5)
@@ -126,28 +206,8 @@ if __name__ == "__main__":
     main()
 ```
 
-Server side (order_server_pc.py — Kevin to confirm, or Xinyan/agent can edit), add 3 endpoints:
-- `POST /arrived` — carrier calls on arrival; server records the event
-- `GET /letterbox_event?box=letterbox-1` — letterbox polls; returns {"event":"arrived"} when an event is pending
-- `POST /letterbox_report` — letterbox reports {"opened": true/false}; server stores it; carrier signs the Solana tx only after opened=true
-
-Carrier side (main.py) addition: when haversine distance < 15 m, first POST /arrived, wait for opened=true, then sign the Solana transaction.
-
-## 6. Test sequence (each step must pass before the next)
-
-1. Servo local test (no network): 3-line script, servo.max()/servo.min() — verify wiring and power
-2. Micro switch test: print(door_switch.is_pressed), press by hand, watch True/False
-3. Full-flow simulation (KEY): no real GPS needed — trigger an arrived event manually on the server, watch letterbox open + report opened
-4. Integration: carrier on phone hotspot, GPS-arrival logic triggers the complete chain
-5. Outdoor demo: switch to 4G + Staex (final form)
-
-## 7. Pitfalls (memorize these)
-
-- Servo must have independent power + common ground, or you get resets/burned board
-- Metal letterbox shields 4G — route the antenna outside
-- Door too heavy -> servo stalls: keep the door light, or move to plan B (magnetic lock)
-- Mount the micro switch where it senses "the door is actually open", not "the servo finished turning" — the physical confirmation is this paper's selling point, don't fake it
-- Server polling is fine, but keep the interval reasonable (2 s is good; don't spam the server)
-
----
-*Next step: buy servo + micro switch + jumper wires, then do local tests 1-2. Ask the agent to edit the server code when ready.*
+Dependencies (installed on the Pi via SSH):
+```
+sudo apt install -y python3-gpiozero
+pip3 install --user requests
+```
