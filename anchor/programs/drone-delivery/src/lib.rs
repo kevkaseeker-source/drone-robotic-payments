@@ -7,7 +7,7 @@ declare_id!("3NmsWVX39uvzG3PBNPdSe4FTgudqSeLphJSbMDhV5F8Y");
 pub mod drone_delivery {
     use super::*;
 
-    /// Buyer ruft auf: GPS-Koordinaten + SOL in Escrow-PDA sperren.
+    /// Buyer calls: locks GPS coordinates + SOL into the escrow PDA.
     pub fn create_delivery(
         ctx: Context<CreateDelivery>,
         amount: u64,
@@ -37,7 +37,7 @@ pub mod drone_delivery {
         Ok(())
     }
 
-    /// RPi4 ruft auf: GPS prüfen → SOL an Seller auszahlen.
+    /// RPi4 calls: verify GPS -> payout SOL to the seller.
     pub fn confirm_delivery(
         ctx: Context<ConfirmDelivery>,
         actual_lat: i64,
@@ -51,7 +51,7 @@ pub mod drone_delivery {
         let clock = Clock::get()?;
         require!(clock.unix_timestamp <= escrow.deadline, DroneError::DeliveryExpired);
 
-        // GPS-Toleranz ~22m lat, ~20m lon bei 52°N
+        // GPS tolerance ~22m lat, ~20m lon at 52°N
         let lat_diff = (actual_lat - escrow.target_lat).abs();
         let lon_diff = (actual_lon - escrow.target_lon).abs();
         require!(lat_diff <= 2000 && lon_diff <= 3000, DroneError::NotAtTarget);
@@ -76,16 +76,16 @@ pub mod drone_delivery {
         Ok(())
     }
 
-    /// Buyer ruft auf: Refund nach Deadline-Ablauf.
+    /// Buyer calls: refund after the deadline has expired.
     pub fn cancel_delivery(ctx: Context<CancelDelivery>) -> Result<()> {
         let escrow = &ctx.accounts.escrow;
         require!(escrow.status == DeliveryEscrow::STATUS_PENDING, DroneError::NotPending);
         let clock = Clock::get()?;
         require!(clock.unix_timestamp > escrow.deadline, DroneError::DeadlineNotReached);
-        Ok(()) // close = buyer überträgt alle Lamports zurück
+        Ok(()) // close = buyer transfers all lamports back
     }
 
-    /// Drone-Operator ruft auf: Account schließen nach Lieferung (Rent zurück).
+    /// Drone operator calls: close account after delivery (rent returned).
     pub fn close_escrow(_ctx: Context<CloseEscrow>) -> Result<()> {
         Ok(())
     }
@@ -123,9 +123,9 @@ pub struct CreateDelivery<'info> {
     pub escrow: Account<'info, DeliveryEscrow>,
     #[account(mut)]
     pub buyer: Signer<'info>,
-    /// CHECK: Seller-Pubkey wird nur gespeichert
+    /// CHECK: seller pubkey is only stored
     pub seller: AccountInfo<'info>,
-    /// CHECK: Drone-Operator-Pubkey als PDA-Seed
+    /// CHECK: drone operator pubkey as PDA seed
     pub drone_operator: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -140,7 +140,7 @@ pub struct ConfirmDelivery<'info> {
     )]
     pub escrow: Account<'info, DeliveryEscrow>,
     pub drone_operator: Signer<'info>,
-    /// CHECK: Seller verifiziert via constraint
+    /// CHECK: seller verified via constraint
     #[account(mut)]
     pub seller: AccountInfo<'info>,
 }

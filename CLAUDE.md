@@ -1,5 +1,18 @@
 # Machine Economy Lab — Research Paper Repository
 
+> **Source of truth for the paper outline:** the Google Doc
+> (https://docs.google.com/document/d/1wvbvqWtbmJVxRuOWr4nrCI1FpnJ7VJlhOxUPSsQWCwc/edit)
+> is the authoritative outline/assignment document. The chapter table below
+> is a summary only — if it ever disagrees with the Google Doc, the Google
+> Doc wins. The published paper itself lives in `paper/` (single HTML file);
+> edit the HTML only for content already written, and update this table to
+> match.
+>
+> **Before pushing chapter edits, run the consistency check:**
+> `python3 scripts/check_paper_refs.py paper/Machine_Economy_Lab_Research_Paper.html`
+> (verifies every body citation [n] has a References entry and no duplicate
+> figure captions).
+
 ## Project Overview
 
 This repo contains the prototype code and research paper for the **Machine Economy Lab** at HTW Berlin.  
