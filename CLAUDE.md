@@ -6,11 +6,23 @@ This repo contains the prototype code and research paper for the **Machine Econo
 Supervisor: Prof. Dr. Alexandra Mikityuk.  
 Research Question: How can GPS-triggered autonomous drone delivery with on-chain Solana payment settlement enable trustless machine-to-machine transactions?
 
+**Team:**
+- Kevin Ehrentraut — Founder & Technical Lead (kevin@staex.io) · Marketing at Staex GmbH
+- Xinyan Liu — Hardware & Mechatronics · Industrial Engineering (Chinese-German double degree, HTW Berlin, final semester, internship at ABEX, bachelor thesis running)
+- Yashdeep Singh (Yash) — Business & Market Research · Digital Business student BHT Berlin (6th semester), Business Development at Hydro Berlin startup
+- Supervisor: Prof. Dr. Alexandra Mikityuk — CEO Staex GmbH · Professor HTW Berlin
+
+**Current status (2026-08-16):**
+- Indoor PoC: ✅ complete — video proof on X, real Devnet TX, 0.2 SOL escrow flow working
+- Unit C (SunFounder PiCar-X, RPi 4 Model B): ✅ hardware ordered — software still pending (Anchor, keypair, Solana client, GPS antenna, Staex MCC + M2M SIM)
+- Outdoor GPS test: ⏳ not yet done — Unit C first, then Unit B (drone)
+- Abstract: drafted (not yet inserted into paper — needs Kevin approval first)
+- Superteam Germany grant: Carlo Abdel-Nour (carlo.abdelnour@gmail.com) — call 2026-08-13
+
 **Prototype built:**
-- Raspberry Pi + Waveshare SIM7600X HAT (GPS via ttyUSB2)
-- Pixhawk flight controller (MAVLink via /dev/serial0)
+- Raspberry Pi 4 Model B + Waveshare SIM7600X HAT (GPS via ttyUSB2)
 - Anchor smart contract on Solana Devnet — GPS geofence triggers escrow release
-- Indoor PoC proven; outdoor test completed
+- Indoor PoC proven (May 2026); outdoor test with PiCar-X pending
 
 ## Repository Structure
 
@@ -99,11 +111,16 @@ Never commit the PAT value into any file — always pass it only in the remote U
 - **GPS geofence (on-chain, lib.rs):** `lat_diff <= 2000 && lon_diff <= 3000` in degE7 encoding = ±22m lat × ±20m lon at 52°N
 - **GPS geofence (client-side, pixhawk_bridge.py):** Haversine formula, `ARRIVAL_RADIUS_M = 13.0m`
 - **GPS source:** Waveshare SIM7600X HAT via AT+CGPSINFO on /dev/ttyUSB2, ~0.5 Hz sampling
-- **Payment:** Anchor escrow, full amount to seller on `confirm_delivery`; split-payment (delivery fee + product price) is planned for production but not yet implemented
+- **Escrow states (lib.rs):** exactly 3 — `STATUS_PENDING = 0`, `STATUS_DELIVERED = 1`, `STATUS_CANCELLED = 2`. No other states exist.
+- **Escrow instructions (lib.rs):** exactly 4 — `create_delivery`, `confirm_delivery`, `cancel_delivery`, `close_escrow`
+- **Payment:** Anchor escrow, full amount to seller on `confirm_delivery`; split-payment planned but not implemented
 - **MCC** = Mesh Companion Container (Staex product) — NOT "Machine Connectivity Cloud"
 - **Solana network:** Devnet (not Mainnet)
-- **Outdoor test:** completed; Step 4a = geofence trigger (GPS arrives within radius), Step 4b = TX confirmation (~4s later on Solana)
+- **Outdoor test:** NOT yet done — indoor PoC complete, outdoor with PiCar-X is next step
 - **Smart contract language:** Rust (Anchor framework), deployed to Devnet
+- **3-Node system:** Unit A (Letterbox, RPi), Unit B (Drone), Unit C (SunFounder PiCar-X, RPi 4 Model B — already built, software pending)
+- **Jetson Nano:** SEPARATE from 3-node system — for x402 AI Agent payment experiments (research comparison)
+- **x402 Protocol:** HTTP-based autonomous payment standard (Coinbase/Linux Foundation 2026) — being compared to GPS-triggered escrow
 - **Three-node trust model:** Drone operator (RPi), delivery node (letterbox RPi), Solana blockchain — each independent, no single point of trust
 
 ## GitLab Pages
