@@ -376,21 +376,17 @@ INDEX_HTML = """<!doctype html>
   </div>
 
   <div class="panel" style="flex-basis:100%;">
-    <div class="label">Auto — Live-Kamera &amp; Sensoren</div>
-    <div id="carFeed">__PICAR_SERVER_URL__ nicht konfiguriert — Auto-Dashboard nicht eingebettet.</div>
-  </div>
-
-  <div class="panel" style="flex-basis:100%;">
-    <div class="label">Auto steuern</div>
-    <div class="ctrl-row">
+    <div class="label">Auto — Live-Kamera, Sensoren &amp; Steuerung</div>
+    <div class="ctrl-row" style="align-items:flex-start;">
+      <div id="carFeed">__PICAR_SERVER_URL__ nicht konfiguriert — Auto-Dashboard nicht eingebettet.</div>
       <div>
         <div class="label">Fahren</div>
         <div class="dpad">
-          <div></div><button onmousedown="drive(40,0)" onmouseup="driveStop()" ontouchstart="drive(40,0)" ontouchend="driveStop()">▲</button><div></div>
-          <button onmousedown="drive(0,-30)" onmouseup="driveStop()" ontouchstart="drive(0,-30)" ontouchend="driveStop()">◀</button>
+          <button onmousedown="drive(30,-30)" onmouseup="driveStop()" ontouchstart="drive(30,-30)" ontouchend="driveStop()">↖</button><button onmousedown="drive(40,0)" onmouseup="driveStop()" ontouchstart="drive(40,0)" ontouchend="driveStop()">▲</button><button onmousedown="drive(30,30)" onmouseup="driveStop()" ontouchstart="drive(30,30)" ontouchend="driveStop()">↗</button>
+          <button onmousedown="drive(30,-30)" onmouseup="driveStop()" ontouchstart="drive(30,-30)" ontouchend="driveStop()">◀</button>
           <button onclick="driveStop()">■</button>
-          <button onmousedown="drive(0,30)" onmouseup="driveStop()" ontouchstart="drive(0,30)" ontouchend="driveStop()">▶</button>
-          <div></div><button onmousedown="drive(-40,0)" onmouseup="driveStop()" ontouchstart="drive(-40,0)" ontouchend="driveStop()">▼</button><div></div>
+          <button onmousedown="drive(30,30)" onmouseup="driveStop()" ontouchstart="drive(30,30)" ontouchend="driveStop()">▶</button>
+          <button onmousedown="drive(-30,-30)" onmouseup="driveStop()" ontouchstart="drive(-30,-30)" ontouchend="driveStop()">↙</button><button onmousedown="drive(-40,0)" onmouseup="driveStop()" ontouchstart="drive(-40,0)" ontouchend="driveStop()">▼</button><button onmousedown="drive(-30,30)" onmouseup="driveStop()" ontouchstart="drive(-30,30)" ontouchend="driveStop()">↘</button>
         </div>
       </div>
       <div>
