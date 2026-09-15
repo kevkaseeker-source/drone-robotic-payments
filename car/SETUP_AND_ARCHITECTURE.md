@@ -332,3 +332,84 @@ confirmed to survive both a clean reboot and a hard power loss.
       with a real reboot — power on car, wait under a minute, everything
       runs with no SSH/terminal needed (§8). Currently in `--demo --dry-run`
       mode by design (see §8) until the real order flow exists.
+- [x] Real order app (`car/order_app_pc.py`) built and the first real
+      end-to-end delivery completed on Devnet (§10)
+
+## 10. First real end-to-end delivery — 2026-09-16
+
+**`car/order_app_pc.py`** — a new Flask app, runs on the buyer's own
+machine (not the RPi — buyer is a separate role, see §"Migrated to
+Kevin's own RoboPay network" for the same reasoning applied to wallets).
+Holds a **fixed buyer Devnet keypair** (`HKSt5XDrvupqbkj8JG8wyX4jJnf3aXdbjGp6zXUckEXD`,
+per Kevin's requirement that the buyer identity stay constant rather than
+being generated per order) and implements `create_delivery`/`cancel_delivery`
+client-side (this repo previously only had these for the drone in
+`solana_client.py`, which only wraps `confirm_delivery`/`close_escrow` —
+the buyer-side instructions didn't have a Python client yet). Serves the
+same `/active_order` etc. API shape as the drone's `order_server_pc.py`,
+so `car_main.py` needed no changes beyond pointing `PC_SERVER_URL` at it.
+Page also embeds the car's live camera/ultrasonic (reads `picar_server.py`
+directly, needs `PICAR_SERVER_URL` set and the two to be on the same
+network), shows both wallets' live Devnet balances, a transaction table
+(labeled "Buyer TX" / "Escrow-Release TX" / "Cancel TX" — the underlying
+instruction names are `create_delivery`/`confirm_delivery`/`cancel_delivery`),
+and drive/camera-angle controls that POST straight to `picar_server.py`.
+State (active order + tx history) persists to `order_state.json` next to
+the script — an earlier version kept this in memory only and lost track
+of a real pending order on every restart of the Flask process, which
+matters because the escrow PDA is one-per-operator (see lib.rs) — you
+can't just place a new order over a forgotten pending one.
+
+**Two real bugs found getting the first live delivery to work:**
+1. **CORS blocked the dashboard's sensor/control calls.** The order app
+   and `picar_server.py` run on different host:port, so browser JS
+   `fetch()` calls are cross-origin. Images (`<img src=".../mjpg">`)
+   aren't subject to CORS, which is why the camera feed "just worked"
+   while `/ultrasonic` and `/camera/qr` silently returned nothing — and
+   separately, POST calls (`/drive`, `/camera/angle`) need CORS
+   *preflight* handling (`Access-Control-Allow-Methods`/`-Headers` on the
+   `OPTIONS` response), not just `Access-Control-Allow-Origin` on the
+   real response, or the browser blocks them before they're ever sent.
+   Fixed with an `@app.after_request` hook in `picar_server.py` setting
+   all three headers.
+2. **`solana_client.py`'s `confirm_transaction()` never detected success.**
+   `status.confirmation_status` is a `solders` enum
+   (`TransactionConfirmationStatus.Finalized`), not the plain string
+   `"finalized"` — the old code's `status.confirmation_status in
+   ("confirmed", "finalized")` check silently never matched anything.
+   Net effect: the very first real `confirm_delivery` actually succeeded
+   on-chain within seconds (verified independently via
+   `getSignatureStatuses` and the seller balance moving), but
+   `car_main.py` sat there burning the full retry budget (3 attempts ×
+   60s timeout) before giving up with a `RuntimeError` — so *the money
+   moved correctly the whole time*, only the client's own success
+   detection (and therefore the `/delivered` callback to the order app)
+   was broken. Fixed by comparing `str(status.confirmation_status).lower()`
+   with substring checks instead of an exact match.
+
+**Also found:** `create_delivery`/`confirm_delivery` share one escrow PDA
+per operator (`seeds = [b"escrow", drone_operator_pubkey]`) — there can
+only ever be one order in flight per unit at a time, and a second
+`create_delivery` fails outright if the first hasn't been confirmed or
+cancelled yet. `cancel_delivery` requires the deadline to have passed
+(`DEADLINE_MINUTES`, default 60) — ran into this directly when an earlier
+dry-run-only order's deadline expired while it sat untouched; had to
+`cancel_delivery` (buyer gets the lamports back, escrow account closes)
+before a fresh order could be placed.
+
+**Result — first real, live, on-chain delivery, fully verified:**
+- `create_delivery` (buyer → escrow): [`5CuW74T8...`](https://explorer.solana.com/tx/5CuW74T8WTi6gANwxUyhbjYTSnDhaWaJeDF2864s9SpsUSbjahmjbU5UB1LdEZbNB6PaLgi1xhYnHiQwakJGNft9?cluster=devnet)
+- Buyer showed the static box QR (`ROBOPAY-BOX-C`) to the car's camera —
+  ultrasonic distance check temporarily disabled via the new
+  `REQUIRE_DISTANCE=false` env var on `car_main.py` (QR-only matching;
+  distance check is still there and can be re-enabled, just not needed
+  for this indoor test)
+- `confirm_delivery` (escrow → seller), fired autonomously by the car's
+  own operator wallet: [`5xYW4xys...`](https://explorer.solana.com/tx/5xYW4xysrr8EhXb2S9rbkUNKZ388cnXJaLRh3M4H64fSNrxHekh8m5yNfn2H94S6T3UuUFew2iYekynAhKoCQFj1?cluster=devnet),
+  `confirmationStatus: finalized`, `err: null`
+- Seller/PiCarOwner wallet balance moved 0 → 0.2 SOL, confirmed both via
+  direct RPC call and on the order app's live wallet panel
+
+This is the milestone the rest of the session had been building toward —
+first confirmed case of Unit C's own machine wallet autonomously signing
+a real payout, triggered purely by a physical QR-code proof of delivery.

@@ -108,7 +108,16 @@ class SolanaClient:
                 if status.err is not None:
                     log.error("TX failed on-chain: %s", status.err)
                     return False
-                if status.confirmation_status in ("confirmed", "finalized"):
+                # confirmation_status is a solders enum whose str() is e.g.
+                # "TransactionConfirmationStatus.Finalized", not the plain
+                # string "finalized" - an exact-match/membership check
+                # against ("confirmed", "finalized") silently never matches.
+                # Found 2026-09-16: a transaction that actually succeeded
+                # on-chain within seconds still made this loop burn the
+                # full timeout on every attempt before giving up, even
+                # though the payout had already gone through.
+                conf = str(status.confirmation_status).lower()
+                if "confirmed" in conf or "finalized" in conf:
                     return True
             time.sleep(2.0)
         log.warning("TX confirmation timeout: %s", signature)

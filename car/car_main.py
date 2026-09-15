@@ -74,6 +74,7 @@ PC_SERVER_URL = os.getenv("PC_SERVER_URL", "https://starless-morality-cranium.ng
 # module docstring).
 BOX_QR_CODE = os.getenv("BOX_QR_CODE", "ROBOPAY-BOX-C")
 
+REQUIRE_DISTANCE = os.getenv("REQUIRE_DISTANCE", "true").lower() not in ("false", "0", "no")
 DIST_MIN_CM = float(os.getenv("DIST_MIN_CM", "15"))
 DIST_MAX_CM = float(os.getenv("DIST_MAX_CM", "25"))
 
@@ -196,8 +197,12 @@ def main():
     lat, lon = order["lat"], order["lon"]
     order_id = order.get("escrow_tx") or DEMO_ORDER["escrow_tx"]  # for logging/reporting only, not matched against the QR
     log.info("Order received: order_id=%s lat=%.6f lon=%.6f", order_id, lat, lon)
-    log.info("Waiting for box QR ('%s') + distance %.0f-%.0fcm ...", BOX_QR_CODE, DIST_MIN_CM, DIST_MAX_CM)
-    send_log(f"Order empfangen! Warte auf Box-QR + Abstand ({DIST_MIN_CM:.0f}-{DIST_MAX_CM:.0f}cm)...")
+    if REQUIRE_DISTANCE:
+        log.info("Waiting for box QR ('%s') + distance %.0f-%.0fcm ...", BOX_QR_CODE, DIST_MIN_CM, DIST_MAX_CM)
+        send_log(f"Order empfangen! Warte auf Box-QR + Abstand ({DIST_MIN_CM:.0f}-{DIST_MAX_CM:.0f}cm)...")
+    else:
+        log.info("Waiting for box QR ('%s') - distance check disabled (REQUIRE_DISTANCE=false) ...", BOX_QR_CODE)
+        send_log("Order empfangen! Warte auf Box-QR (Abstandspruefung deaktiviert)...")
 
     try:
         while True:
@@ -212,11 +217,12 @@ def main():
             log.info("qr=%s  distance=%s cm", qr, dist)
 
             qr_match = qr == BOX_QR_CODE
-            dist_match = dist is not None and DIST_MIN_CM <= dist <= DIST_MAX_CM
+            dist_match = (not REQUIRE_DISTANCE) or (dist is not None and DIST_MIN_CM <= dist <= DIST_MAX_CM)
 
             if qr_match and dist_match:
-                log.info("ARRIVED at delivery box! (qr matched, distance=%.1fcm)", dist)
-                send_log(f"ANGEKOMMEN! QR erkannt, Abstand {dist:.1f}cm - sende Proof of Delivery TX...")
+                log.info("ARRIVED at delivery box! (qr matched, distance=%s)", dist)
+                dist_str = f"{dist:.1f}cm" if dist is not None else "n/a"
+                send_log(f"ANGEKOMMEN! QR erkannt, Abstand {dist_str} - sende Proof of Delivery TX...")
                 _confirm(solana, args.dry_run, lat, lon, order_id)
                 break
 

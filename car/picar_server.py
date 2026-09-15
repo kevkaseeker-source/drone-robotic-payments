@@ -79,6 +79,23 @@ log.info("PiCar-X hardware initialised")
 app = Flask(__name__)
 
 
+@app.after_request
+def add_cors_headers(response):
+    # the order app (order_app_pc.py) runs on a different host:port and
+    # fetches /ultrasonic + /camera/qr via JS - browsers block that
+    # cross-origin without this header (images like the mjpg stream aren't
+    # affected by CORS, which is why the camera worked but sensor data didn't).
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    # POST endpoints (/drive, /camera/angle) with a JSON body are
+    # "non-simple" cross-origin requests - browsers send an OPTIONS
+    # preflight first and check for these two headers before allowing the
+    # real POST through. Only setting Allow-Origin (above) covers GET but
+    # silently blocks POST at the preflight stage.
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "t": time.time()})
