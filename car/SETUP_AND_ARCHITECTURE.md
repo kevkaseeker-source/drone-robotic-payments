@@ -215,6 +215,32 @@ session. Once created, the dashboard/API would be reachable at
 `http://picar-x.staex:8080` per the docstring in `picar_server.py`,
 matching the drone project's `http://picar-x.staex` naming convention.
 
+**Migrated to Kevin's own "RoboPay" network — 2026-09-15.** The setup
+above used a network Maksim (Staex) had provisioned under his own
+account — fine to start, but every new node (e.g. a future backend
+server) would've needed him to issue fresh credentials each time. Kevin
+self-service-created a "RoboPay" network at cas.staex.io/new-network
+under his own account instead, which lets him mint node credentials
+himself going forward. Migrated the car onto it:
+```bash
+sudo systemctl stop mcc
+sudo rm -rf /etc/mcc
+echo "<new-network-private-key>" | sudo mcc init --force --stdin "<new-network-certificate>"
+sudo chmod 400 /etc/mcc/node-private-key.txt
+sudo sed -i 's/^parents = *$/parents = public.staex.io:9376/' /etc/mcc/mcc.conf
+sudo systemctl start mcc
+sudo reboot
+```
+This intentionally issues the car a **new node identity** (old node ID
+`pbraybxmydh10...` is gone) — confirmed via `journalctl -u mcc`: `active
+parent is 188.245.186.74:9376`. New node ID:
+`r93awhdrreetty839ssk48bj227kxp9vw5ezgmm2aj9477sb0rwg`. Verified with a
+full reboot afterward — all four services (`picar-server`, `car-trigger`,
+`mcc`, `ppp-staex-sim`) came back up cleanly on the new network, same as
+every prior autostart test. Any future node (backend server, etc.) should
+join this same "RoboPay" network — Kevin can self-issue its credentials
+from cas.staex.io without needing to ask Maksim again.
+
 **Follow-up bug found 2026-09-15:** `/dev/ttyUSB2` (the AT-command port used
 in `/etc/ppp/peers/staex-sim`) is not stable — the SIM7600 dongle's ttyUSB
 numbering shifted after a replug/reboot (`ttyUSB2` disappeared, remaining
