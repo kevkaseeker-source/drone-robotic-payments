@@ -215,6 +215,21 @@ session. Once created, the dashboard/API would be reachable at
 `http://picar-x.staex:8080` per the docstring in `picar_server.py`,
 matching the drone project's `http://picar-x.staex` naming convention.
 
+**Follow-up bug found 2026-09-15:** `/dev/ttyUSB2` (the AT-command port used
+in `/etc/ppp/peers/staex-sim`) is not stable — the SIM7600 dongle's ttyUSB
+numbering shifted after a replug/reboot (`ttyUSB2` disappeared, remaining
+ports renumbered), so `ppp-staex-sim.service` crash-looped with `pppd:
+unrecognized option '/dev/ttyUSB2'` (a confusing error for what's actually
+"device doesn't exist"). Re-probed all `/dev/ttyUSB*` the same way as in
+§7 and found the AT port had moved to `ttyUSB3`. Fixed properly this time
+by pointing the peers file at the **stable** udev path instead of the
+numbered one: `/dev/serial/by-id/usb-SimTech__Incorporated_SimTech__Incorporated_0123456789ABCDEF-if02-port0`
+(`ls /dev/serial/by-id/` lists these — the `-if02-port0` suffix is the USB
+interface number, which doesn't change on replug/renumbering the way the
+`ttyUSB*` number does). If `ppp-staex-sim` ever crash-loops again with a
+similar "unrecognized option" error, check `ls /dev/serial/by-id/` first —
+the underlying device is very likely just fine.
+
 ## 8. systemd autostart — set up 2026-09-12
 
 Two units, `/etc/systemd/system/picar-server.service` and `car-trigger.service`:
