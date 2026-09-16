@@ -502,10 +502,39 @@ packages (`solana==0.36.6`, `flask`, `qrcode`, `pillow`, `requests`) were
 already present on this server image — didn't need installing.
 
 **Publicly reachable via Staex Hosting's "Web address" feature**
-(dashboard → Web address → pick a name + which local port it maps to,
-HTTPS terminated at their edge, plain HTTP to the app locally):
-- Buyer app: **https://robopay-buyer.staexhosting.com** (→ port 5001)
-- Seller/operator app: **https://robopay-seller.staexhosting.com** (→ port 5002)
+(dashboard → Web address / `mcp__staex__publish_site` → pick a name + which
+local port it maps to, HTTPS terminated at their edge, plain HTTP to the
+app locally). **Important limitation, found 2026-09-17:** this feature
+only supports ONE published address per server at a time — publishing a
+second name/port silently *replaces* the first rather than adding to it
+(confirmed via the tool's own description: "Calling this again with a
+different name or port replaces the current address"). Publishing
+`robopay-buyer` then `robopay-seller` separately, as originally set up,
+meant only the seller app was ever really reachable from outside — the
+buyer app returned 404 despite running fine locally, which is what broke
+buyer-app access on the day before the Superteam Germany bootcamp.
+
+**Fix: a small gateway app (`gateway_app.py`, port 8000) in front of both.**
+It does **not** merge buyer_app.py and seller_app.py — those stay two
+fully separate processes/files/ports/logins, exactly as before. The
+gateway is a third, separate Flask process that only proxies:
+`/buyer/*` → `http://localhost:5001/*`, `/seller/*` →
+`http://localhost:5002/*`, forwarding method/headers/body untouched (so
+each app's own Basic Auth check still runs on the real app). The only
+non-trivial part: each app's index page HTML contains root-relative
+`fetch('/order')`/`<img src="/qrcode.png">` calls that would otherwise
+resolve against the gateway's own root once loaded through a `/buyer/`
+prefix — the gateway rewrites just those two patterns
+(`fetch('/...` → `fetch('/buyer/...`, `src="/...` → `src="/buyer/...`) in
+the index HTML only, via regex, before relaying it. Every other
+route (JSON responses, the MJPEG stream) passes through unchanged.
+Runs as `robopay-gateway.service` (same systemd pattern as the other two).
+One address now published: **https://robopay.staexhosting.com**
+(→ port 8000) with `/` showing a two-button picker page, `/buyer/` and
+`/seller/` for the two apps. The old separate
+`robopay-buyer.staexhosting.com` / `robopay-seller.staexhosting.com`
+addresses no longer resolve — this account can only ever have one live
+address, so there was no way to keep them as separate hostnames.
 
 Both apps now run 24/7 independent of Kevin's home network or laptop
 being on — this is what makes the car usable away from home (e.g. at a
