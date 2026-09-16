@@ -20,11 +20,13 @@ Run:
 
 import os
 
-from flask import Flask, Response, jsonify
+import requests
+from flask import Flask, Response, jsonify, request, stream_with_context
 
 import robopay_common as common
 
 PORT = int(os.getenv("SELLER_APP_PORT", "5002"))
+PICAR_TIMEOUT = 5
 
 app = Flask(__name__)
 common.make_auth(app, "SELLER_USERNAME", "SELLER_PASSWORD")
@@ -32,8 +34,7 @@ common.make_auth(app, "SELLER_USERNAME", "SELLER_PASSWORD")
 
 @app.route("/")
 def index():
-    html = INDEX_HTML.replace("__PICAR_SERVER_URL__", common.PICAR_SERVER_URL)
-    return Response(html, mimetype="text/html")
+    return Response(INDEX_HTML, mimetype="text/html")
 
 
 @app.route("/wallet")
@@ -52,6 +53,74 @@ def transactions():
     _, tx_history = common.load_state()
     mine = [t for t in tx_history if t["type"] == "confirm_delivery"]
     return jsonify(list(reversed(mine)))
+
+
+# ---------------------------------------------------------------------------
+# Proxy to picar_server.py — the browser (on a phone, anywhere on the public
+# internet) can only reach THIS app's own domain. PICAR_SERVER_URL (e.g.
+# http://backend-server, the MCC tunnel's DNS name) only resolves/routes
+# from inside the MCC network - i.e. from this server itself, not from an
+# arbitrary browser. So this server fetches picar_server.py's API
+# server-side and relays it, rather than sending the car's address to the
+# browser directly (found 2026-09-16: drive buttons did nothing from a
+# phone because the browser was trying and failing to reach an
+# MCC-internal hostname on its own).
+# ---------------------------------------------------------------------------
+@app.route("/proxy/ultrasonic")
+def proxy_ultrasonic():
+    try:
+        r = requests.get(f"{common.PICAR_SERVER_URL}:8080/ultrasonic", timeout=PICAR_TIMEOUT)
+        return Response(r.content, status=r.status_code, mimetype="application/json")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/proxy/camera/qr")
+def proxy_qr():
+    try:
+        r = requests.get(f"{common.PICAR_SERVER_URL}:8080/camera/qr", timeout=PICAR_TIMEOUT)
+        return Response(r.content, status=r.status_code, mimetype="application/json")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/proxy/drive", methods=["POST"])
+def proxy_drive():
+    try:
+        r = requests.post(f"{common.PICAR_SERVER_URL}:8080/drive", json=request.get_json(force=True), timeout=PICAR_TIMEOUT)
+        return Response(r.content, status=r.status_code, mimetype="application/json")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/proxy/stop", methods=["POST", "GET"])
+def proxy_stop():
+    try:
+        r = requests.get(f"{common.PICAR_SERVER_URL}:8080/stop", timeout=PICAR_TIMEOUT)
+        return Response(r.content, status=r.status_code, mimetype="application/json")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/proxy/camera/angle", methods=["POST"])
+def proxy_camera_angle():
+    try:
+        r = requests.post(f"{common.PICAR_SERVER_URL}:8080/camera/angle", json=request.get_json(force=True), timeout=PICAR_TIMEOUT)
+        return Response(r.content, status=r.status_code, mimetype="application/json")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/proxy/mjpg")
+def proxy_mjpg():
+    try:
+        upstream = requests.get(f"{common.PICAR_SERVER_URL}:9000/mjpg", stream=True, timeout=10)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+    return Response(
+        stream_with_context(upstream.iter_content(chunk_size=4096)),
+        content_type=upstream.headers.get("Content-Type", "multipart/x-mixed-replace"),
+    )
 
 
 INDEX_HTML = """<!doctype html>
@@ -104,7 +173,7 @@ INDEX_HTML = """<!doctype html>
   <div class="panel" style="flex-basis:100%;">
     <div class="label">Auto — Live-Kamera, Sensoren &amp; Steuerung</div>
     <div class="ctrl-row" style="align-items:flex-start;">
-      <div id="carFeed">__PICAR_SERVER_URL__ nicht konfiguriert.</div>
+      <div id="carFeed"></div>
       <div>
         <div class="label">Fahren</div>
         <div class="dpad">
@@ -131,8 +200,6 @@ INDEX_HTML = """<!doctype html>
 </div>
 
 <script>
-const picarUrl = "__PICAR_SERVER_URL__";
-
 async function pollWallet() {
   try {
     const r = await fetch('/wallet');
@@ -164,24 +231,21 @@ async function pollTx() {
 }
 
 async function drive(speed, angle) {
-  if (!picarUrl) return;
   try {
-    await fetch(picarUrl + ':8080/drive', {
+    await fetch('/proxy/drive', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ speed, angle })
     });
   } catch (e) {}
 }
 async function driveStop() {
-  if (!picarUrl) return;
-  try { await fetch(picarUrl + ':8080/stop'); } catch (e) {}
+  try { await fetch('/proxy/stop', { method: 'POST' }); } catch (e) {}
 }
 let camPan = 20, camTilt = 0;
 async function setCam(pan, tilt) {
-  if (!picarUrl) return;
   camPan = pan; camTilt = tilt;
   try {
-    await fetch(picarUrl + ':8080/camera/angle', {
+    await fetch('/proxy/camera/angle', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ pan: camPan, tilt: camTilt })
     });
@@ -189,28 +253,26 @@ async function setCam(pan, tilt) {
 }
 function nudgeCam(dPan, dTilt) { setCam(camPan + dPan, camTilt + dTilt); }
 
-if (picarUrl) {
-  document.getElementById('carFeed').innerHTML = `
-    <div class="car-row">
-      <img class="video" src="${picarUrl}:9000/mjpg">
-      <div class="sensor-box">
-        <div class="label">Ultraschall</div>
-        <div class="sensor-stat" id="distStat">— cm</div>
-        <div class="label" style="margin-top:10px;">QR-Code</div>
-        <div class="sensor-stat" id="qrStat" style="font-size:1rem;">—</div>
-      </div>
-    </div>`;
-  setInterval(async () => {
-    try {
-      const [d, q] = await Promise.all([
-        fetch(picarUrl + ':8080/ultrasonic').then(r => r.json()),
-        fetch(picarUrl + ':8080/camera/qr').then(r => r.json()),
-      ]);
-      document.getElementById('distStat').textContent = `${d.distance_cm} cm`;
-      document.getElementById('qrStat').textContent = q.qr || '— kein QR erkannt —';
-    } catch (e) {}
-  }, 1000);
-}
+document.getElementById('carFeed').innerHTML = `
+  <div class="car-row">
+    <img class="video" src="/proxy/mjpg">
+    <div class="sensor-box">
+      <div class="label">Ultraschall</div>
+      <div class="sensor-stat" id="distStat">— cm</div>
+      <div class="label" style="margin-top:10px;">QR-Code</div>
+      <div class="sensor-stat" id="qrStat" style="font-size:1rem;">—</div>
+    </div>
+  </div>`;
+setInterval(async () => {
+  try {
+    const [d, q] = await Promise.all([
+      fetch('/proxy/ultrasonic').then(r => r.json()),
+      fetch('/proxy/camera/qr').then(r => r.json()),
+    ]);
+    document.getElementById('distStat').textContent = `${d.distance_cm} cm`;
+    document.getElementById('qrStat').textContent = q.qr || '— kein QR erkannt —';
+  } catch (e) {}
+}, 1000);
 
 pollWallet(); pollOrder(); pollTx();
 setInterval(pollWallet, 5000);
