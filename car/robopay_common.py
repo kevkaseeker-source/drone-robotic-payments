@@ -33,6 +33,13 @@ TARGET_LON = float(os.getenv("TARGET_LON", "14.0600"))
 
 BOX_QR_CODE = os.getenv("BOX_QR_CODE", "ROBOPAY-BOX-C")
 PICAR_SERVER_URL = os.getenv("PICAR_SERVER_URL", "")
+# vilib's video stream (port 9000) is a SEPARATE process from picar_server.py
+# (port 8080) - each needed its own MCC tunnel, and each tunnel gets its own
+# DNS name (set via --name at creation), so these are two different
+# hostnames even though they're the same physical device. Defaults to
+# PICAR_VIDEO_URL if set, else falls back to PICAR_SERVER_URL (correct for
+# same-LAN testing, where both ports are on the one reachable IP).
+PICAR_VIDEO_URL = os.getenv("PICAR_VIDEO_URL", PICAR_SERVER_URL)
 
 DEVNET_EXPLORER = "https://explorer.solana.com/tx/{}?cluster=devnet"
 

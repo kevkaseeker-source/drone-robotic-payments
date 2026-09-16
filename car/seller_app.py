@@ -114,7 +114,7 @@ def proxy_camera_angle():
 @app.route("/proxy/mjpg")
 def proxy_mjpg():
     try:
-        upstream = requests.get(f"{common.PICAR_SERVER_URL}:9000/mjpg", stream=True, timeout=10)
+        upstream = requests.get(f"{common.PICAR_VIDEO_URL}:9000/mjpg", stream=True, timeout=10)
     except Exception as e:
         return jsonify({"error": str(e)}), 502
     return Response(
