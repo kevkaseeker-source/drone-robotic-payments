@@ -413,3 +413,135 @@ before a fresh order could be placed.
 This is the milestone the rest of the session had been building toward —
 first confirmed case of Unit C's own machine wallet autonomously signing
 a real payout, triggered purely by a physical QR-code proof of delivery.
+
+## 11. Split into buyer_app.py + seller_app.py — 2026-09-16
+
+`order_app_pc.py` (§10) mixed two separate roles on one unauthenticated
+page — placing orders (buyer) and monitoring/driving the car (seller/car
+owner). Split into `car/buyer_app.py` and `car/seller_app.py`, sharing
+config/Solana/state-file helpers via `car/robopay_common.py`. Each has its
+own HTTP Basic Auth login (`BUYER_USERNAME`/`BUYER_PASSWORD`,
+`SELLER_USERNAME`/`SELLER_PASSWORD` env vars — native browser login
+prompt, no custom form needed, works fine on mobile). `buyer_app.py` still
+owns `order_state.json` and is the one `car_main.py`'s `PC_SERVER_URL`
+points at (its machine-facing routes — `/active_order`, `/delivered`,
+`/force_delivery`, `/rpi_log` — are exempted from auth, since `car_main.py`
+has no concept of HTTP login). `seller_app.py` never touches any private
+key; it only calls `picar_server.py`'s HTTP API and reads the shared state
+file read-only for the Escrow-Release tx history. This is the intended
+foundation for the future Car Owner Solana Mobile dApp.
+
+**Bug found deploying seller_app.py behind the MCC tunnel:** the frontend
+JS originally fetched `picar_server.py` directly at `PICAR_SERVER_URL`
+(the MCC tunnel's DNS name, e.g. `http://backend-server`) from the
+browser. That hostname only resolves/routes from *inside* the MCC
+network — i.e. from the backend server itself — not from an arbitrary
+phone or PC browser on the public internet, so drive buttons silently did
+nothing and the camera feed didn't load. Fixed by adding `/proxy/*` routes
+to `seller_app.py` (`/proxy/drive`, `/proxy/stop`, `/proxy/camera/angle`,
+`/proxy/ultrasonic`, `/proxy/camera/qr`, and a streaming proxy
+`/proxy/mjpg` for the MJPEG feed) — the Flask backend fetches
+`picar_server.py` server-side (which *can* reach the MCC hostname) and
+relays the response; the browser now only ever talks to `seller_app.py`'s
+own public domain.
+
+## 12. Backend server on Staex Hosting — 2026-09-16
+
+Answers the earlier open question ("does Staex have hosting Kevin can use
+instead of a VPS") — yes: **staexhosting.com**, a self-service Staex
+product. Server "Staex" (2 vCPU, 2GB RAM, 20GB encrypted disk), address
+`10.40.174.209` — **on a private network, not reachable from the internet
+by IP**; the only initial access is a browser-based root shell
+("Open terminal" on the server's dashboard page) or the MCP connection
+(see below).
+
+**MCC on the backend server:**
+- Installed the same way as the RPi (§7): `staex-repo.noarch.deb` → `apt-get install mcc`
+- Joined Kevin's own "RoboPay" network (same one the car is on, see the
+  "Migrated to Kevin's own RoboPay network" section above) using the
+  self-service **"Run the following command to setup a new node"** flow
+  on the network's page at `cas.staex.io/networks/<network-id>` — simpler
+  than the certificate+`--stdin`-private-key flow used earlier: just
+  `mcc init <network-certificate>` (the certificate is the whole
+  network's shared credential, safe to reuse across every node in it) —
+  it then interactively asks for the network's private key (also shared,
+  safe to reuse) and generates its own fresh, unique node identity
+  locally. Parent line (`parents = public.staex.io:9376`) has to be added
+  manually — this server's `mcc.conf` template only ships the commented
+  example, not an empty active line like the RPi's did, so a naive `sed`
+  replace silently matches nothing; just append the line instead.
+- Node ID: `zrk9czd25ek1ns3h81saecdf0zesnv50b0f1v573f7x66yvjw5fg`, same
+  parent as the car (`188.245.186.74:9376`)
+
+**Three MCC tunnels, created on the car, granting this server access:**
+each service `picar_server.py` exposes lives on a different port, and
+each port needed its **own** tunnel with its **own** DNS name (set via
+`--name` at creation) — a mistake worth flagging since it's easy to
+assume one tunnel covers "the car":
+```bash
+mcc create-tunnel --name backend-server       --remote-node <server-node-id> --targets tcp:8080 --stdin   # picar_server.py API
+mcc create-tunnel --name backend-server-video --remote-node <server-node-id> --targets tcp:9000 --stdin   # vilib's separate MJPEG stream process
+mcc create-tunnel --name backend-server-ssh   --remote-node <server-node-id> --targets tcp:22   --stdin   # SSH access to the car from the server
+```
+(all run with the network private key piped via `--stdin`, same as the
+network-migration `mcc init` earlier — sudo password and the piped secret
+must not share one command, see §7's note on that). Reachable from the
+backend server as `http://backend-server:8080`, `http://backend-server-video:9000`,
+and `ssh ...@backend-server-ssh` respectively — **not** interchangeable
+hostnames despite being the same physical car. `robopay_common.py` has
+both `PICAR_SERVER_URL` and `PICAR_VIDEO_URL` for exactly this reason.
+
+**Apps running as systemd services** (`robopay-buyer.service`,
+`robopay-seller.service` — same autostart pattern as the RPi, §8):
+`WorkingDirectory=/root/robopay-research-group/car`,
+`ExecStart=/root/robopay-venv/bin/python3 buyer_app.py` (or
+`seller_app.py`), env vars for the Basic Auth credentials and
+`PICAR_SERVER_URL=http://backend-server` / `PICAR_VIDEO_URL=http://backend-server-video`
+set inline via `Environment=`. `python3-venv`/pip and all required
+packages (`solana==0.36.6`, `flask`, `qrcode`, `pillow`, `requests`) were
+already present on this server image — didn't need installing.
+
+**Publicly reachable via Staex Hosting's "Web address" feature**
+(dashboard → Web address → pick a name + which local port it maps to,
+HTTPS terminated at their edge, plain HTTP to the app locally):
+- Buyer app: **https://robopay-buyer.staexhosting.com** (→ port 5001)
+- Seller/operator app: **https://robopay-seller.staexhosting.com** (→ port 5002)
+
+Both apps now run 24/7 independent of Kevin's home network or laptop
+being on — this is what makes the car usable away from home (e.g. at a
+Superteam Germany event): as long as the car has power and *any*
+connectivity (venue WiFi, or its own SIM/PPP as a fallback, §7), MCC finds
+it and both apps keep working.
+
+**SSH jump-host for remote debugging:** with the `backend-server-ssh`
+tunnel in place, `ssh picarx@backend-server-ssh` from the Staex Hosting
+server's shell reaches the car directly — added a short `~/.ssh/config`
+alias there (`Host car` → `HostName backend-server-ssh`, `User picarx`) so
+it's just `ssh car`. Practical effect: debugging the car from anywhere
+only requires opening staexhosting.com in a browser and clicking
+"Open terminal" — no dependency on being on the same network as the car
+or having the RPi's SSH key on whatever device is at hand.
+
+**MCP connection for direct agent access to the server:** Staex Hosting
+exposes an MCP endpoint (`https://staexhosting.com/mcp`) with scoped API
+keys (`server:read`, `vm:exec`, `vm:files`, `site:publish`). Connected via
+`claude mcp add --transport http --scope user staex https://staexhosting.com/mcp --header "Authorization: Bearer <key>"`
+— `--scope user` matters: this repo's working directory is a shared
+Google Drive folder synced across the whole Staex team, and a
+project-scoped `.mcp.json` would have put the Bearer token in that shared
+folder. User scope keeps it in the local machine's own Claude config
+instead. Requires the standalone `claude` CLI (the VS Code extension
+alone doesn't expose one on PATH) — installed via
+`irm https://claude.ai/install.ps1 | iex` on Windows. The connection
+intermittently fails with a Cloudflare Tunnel error (1033) on Staex's
+side — transient so far, falls back cleanly to the browser terminal when
+it happens.
+
+**Known rough edge:** the Staex Hosting browser terminal has a paste bug
+— pasting a multi-line command block sometimes re-executes it 2-4× and/or
+concatenates repeated pastes into one malformed line (e.g.
+`backend-server-sshssh`). Workarounds that worked: prefer single-line
+commands (`printf '...\n...' > file` instead of a `cat <<EOF` heredoc for
+anything that must land correctly), keep any interactively-typed hostname
+short (hence the `ssh car` alias), or just use the MCP `run_command` tool
+instead once it's connected.
