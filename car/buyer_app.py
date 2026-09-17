@@ -97,7 +97,15 @@ def index():
 @app.route("/order", methods=["POST"])
 def place_order():
     global _active_order, _force_delivery
-    if _active_order is not None:
+    # Only a still-pending order blocks a new one - a "delivered" record just
+    # sits here for the buyer's own confirmation display (see pollStatus() in
+    # INDEX_HTML) and gets overwritten by the fresh order below. Blocking on
+    # "any _active_order at all" meant every single order after the very
+    # first one failed here forever, since /delivered (below) never clears
+    # it - found 2026-09-17 during the first live end-to-end test, matches
+    # the same "needs to be reset after completion" bug fixed on the car
+    # side (car_main.py now auto-closes the escrow after confirm_delivery).
+    if _active_order is not None and _active_order.get("status") == "pending":
         return jsonify({"success": False, "error": "Es läuft bereits eine Bestellung"}), 400
     body = request.get_json(silent=True) or {}
     lat = float(body.get("lat", common.TARGET_LAT))
@@ -189,7 +197,7 @@ def wallet():
 
 @app.route("/transactions")
 def transactions():
-    mine = [t for t in _tx_history if t["type"] in ("create_delivery", "cancel_delivery")]
+    mine = [t for t in _tx_history if t["type"] in ("create_delivery", "cancel_delivery", "confirm_delivery")]
     return jsonify(list(reversed(mine)))
 
 
@@ -259,6 +267,7 @@ INDEX_HTML = """<!doctype html>
 const TX_LABELS = {
   create_delivery: 'Buyer TX (Escrow-Einzahlung)',
   cancel_delivery: 'Cancel TX (Rueckerstattung)',
+  confirm_delivery: 'Escrow-Release TX (Auszahlung)',
 };
 
 async function placeOrder() {
@@ -273,6 +282,7 @@ async function placeOrder() {
         `<div>Bestellt! <a href="https://explorer.solana.com/tx/${d.tx}?cluster=devnet" target="_blank">TX auf Solana Explorer ansehen</a></div>
          <div class="qr"><img src="/qrcode.png"></div>
          <div style="margin-top:6px; color:#888; font-size:0.85rem;">Diesen Code dem Auto zeigen, um die Zahlung freizugeben.</div>`;
+      document.getElementById('orderResult').dataset.qrShown = '1';
     } else {
       document.getElementById('orderResult').textContent = 'Fehler: ' + d.error;
       btn.disabled = false; btn.textContent = 'SOL ins Escrow einzahlen (0.20 SOL)';
@@ -296,11 +306,29 @@ async function pollStatus() {
       const cls = d.status === 'delivered' ? 'status-delivered' : 'status-pending';
       el.innerHTML = `<span class="${cls}">${d.status}</span>`;
       if (d.status === 'delivered') {
-        btn.disabled = true; btn.textContent = 'Bestellung abgeschlossen';
+        // Delivered doesn't block a new order (see place_order() server-side) -
+        // only keep the button disabled while something is actually pending.
+        btn.disabled = false; btn.textContent = 'SOL ins Escrow einzahlen (0.20 SOL)';
         if (d.delivery_tx && d.delivery_tx !== 'dry-run-tx') {
           el.innerHTML += `<br><a href="https://explorer.solana.com/tx/${d.delivery_tx}?cluster=devnet" target="_blank">Escrow-Release TX ansehen</a>`;
         }
+      } else {
+        btn.disabled = true; btn.textContent = 'Bestellung läuft...';
+        // The QR only used to appear right after clicking the button itself
+        // (placeOrder()'s own success handler) - reloading the page, or an
+        // order placed some other way, showed nothing at all even though the
+        // order was genuinely pending and the box QR is always valid. Show
+        // it any time there's a pending order, not just right after placing it.
+        if (!document.getElementById('orderResult').dataset.qrShown) {
+          document.getElementById('orderResult').innerHTML =
+            `<div class="qr"><img src="/qrcode.png"></div>
+             <div style="margin-top:6px; color:#888; font-size:0.85rem;">Diesen Code dem Auto zeigen, um die Zahlung freizugeben.</div>`;
+          document.getElementById('orderResult').dataset.qrShown = '1';
+        }
       }
+    }
+    if (d.status !== 'pending') {
+      document.getElementById('orderResult').dataset.qrShown = '';
     }
   } catch (e) {}
 }
