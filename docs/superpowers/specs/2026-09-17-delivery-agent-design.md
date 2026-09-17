@@ -24,7 +24,11 @@ Building a standalone AI agent that can read the car's existing sensors
 and autonomously decide to sign and send the `confirm_delivery`
 transaction, running **in parallel with the existing `car_main.py`**, not
 replacing it — so both trigger paradigms can be compared side by side
-without risking the delivery flow that's already live and working.
+without risking the delivery flow that's already live and working. The
+buyer picks which paradigm handles their specific order via a toggle in
+the buyer app (added 2026-09-17, see § Buyer app below) — this
+supersedes the original "separate test script" plan for creating
+agent-targeted orders.
 
 ## Decisions made during brainstorming
 
@@ -40,8 +44,9 @@ without risking the delivery flow that's already live and working.
   that basis signs the escrow-release transaction itself — an LLM judgment
   call standing in for the current `qr == BOX_QR_CODE` Python comparison.
 - **Relationship to `car_main.py`:** parallel, not a replacement. Own
-  wallet, own escrow order, `car_main.py` stays untouched and keeps running
-  the existing proven flow.
+  wallet, own escrow order, `car_main.py` keeps running the existing
+  proven flow — it gets exactly one small addition (ignore orders not
+  meant for it, see § Buyer app) and is otherwise unchanged.
 
 ## Architecture
 
@@ -72,18 +77,38 @@ script exits (or logs and idles) once signed.
 `seeds = [b"escrow", drone_operator.key().as_ref()]` — **one escrow slot
 per operator pubkey.** The existing flow always creates orders against the
 fixed `OPERATOR_PUBKEY` (`car_main.py`'s operator, `7Viz...hXia`). For the
-agent to have "its own escrow" to sign against (needed for a real
-parallel, non-interfering comparison), a delivery order has to be created
-with the **agent's own pubkey** passed as `drone_operator` in
-`create_delivery` — the existing buyer app always targets the fixed
-operator pubkey, so it can't order "for the agent" as-is.
+agent to have "its own escrow" to sign against, a delivery order has to be
+created with the **agent's own pubkey** passed as `drone_operator` in
+`create_delivery`. Resolved by the buyer app toggle below, which picks
+the operator pubkey per order based on the buyer's choice.
 
-**v1 approach:** don't extend the buyer app's UI for this. Write a small,
-separate CLI/test script (reusing `create_delivery()`'s logic from
-`car/buyer_app.py`, parameterized by operator pubkey) to place a test
-order specifically targeting the agent's wallet. This keeps the buyer app
-untouched and the experiment self-contained — revisit only if the
-comparison needs to run outside a dev/test context.
+## Buyer app: trigger-mode toggle
+
+`car/buyer_app.py`'s order form gets a second control alongside the
+existing "SOL ins Escrow einzahlen" button: a choice between **"Fester
+QR-Code"** (today's behavior, default) and **"KI-Agent"**.
+
+- `POST /order` body gains a `trigger_mode` field (`"fixed"` |
+  `"agent"`, defaults to `"fixed"` if omitted — keeps existing API
+  callers working unchanged)
+- `create_delivery(lat, lon, operator_pubkey)` gets parameterized by
+  operator pubkey instead of always using `common.operator_pubkey` —
+  passes either the existing `OPERATOR_PUBKEY` or a new
+  `AGENT_OPERATOR_PUBKEY` (env var, § Wallet / funding) depending on
+  `trigger_mode`
+- `_active_order` gains a `trigger_mode` field, so `/active_order`
+  (already polled by both `car_main.py` and the new
+  `agent/delivery_agent.py`) tells each consumer whether an order is
+  meant for it
+- **Both consumers filter client-side on the same shared endpoint** —
+  no new API surface. `car_main.py` gets one small addition: only act
+  when `trigger_mode == "fixed"`, otherwise keep waiting (mirrors what
+  `delivery_agent.py` does for `"agent"`). This is the one necessary
+  touch to `car_main.py` — everything else about it stays as-is.
+- Only one order in flight at a time overall, same as today (not one
+  slot per mode) — keeps `_active_order`'s bookkeeping simple for v1;
+  running one QR-mode and one Agent-mode order concurrently is a
+  possible future extension, not needed for the first comparison.
 
 ## Wallet / funding
 
@@ -112,5 +137,8 @@ judgment, reasoning trace — is the actual research output.
 - Deciding where the agent ultimately "lives" on the PiCarX itself
   (on-device vs. cloud-side) — explicitly deferred per Kevin: build the
   agent first, decide PiCarX placement afterward.
-- Any change to `car_main.py`, the buyer/seller apps, or the Anchor
-  program — v1 touches none of them.
+- Running both trigger modes concurrently (one shared "slot" for now,
+  see § Buyer app).
+- Any change to `seller_app.py` or the Anchor program itself — neither
+  needs to change for this spec. `car_main.py` and `buyer_app.py` do
+  get the small, specific changes described above, not a rewrite.
