@@ -25,6 +25,12 @@ SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.devnet.solana.com")
 PROGRAM_ID = os.getenv("DRONE_PROGRAM_ID", "3NmsWVX39uvzG3PBNPdSe4FTgudqSeLphJSbMDhV5F8Y")
 OPERATOR_PUBKEY = os.getenv("OPERATOR_PUBKEY", "7VizNvqBSnHnP8ySnsjxxyUnBQCybVnJHBDRyvaThXia")
 SELLER_PUBKEY = os.getenv("SELLER_PUBKEY", "7uoFeSG546UvK5HYyA97GVmJUTvrXWgGgkTgxspH4d1C")
+# AI delivery-confirmation agent's own operator wallet (separate from the
+# RPi's fixed-QR OPERATOR_PUBKEY above) - see
+# docs/superpowers/specs/2026-09-17-delivery-agent-design.md. Wallet only
+# exists for now (visibility in buyer/seller apps); the agent itself isn't
+# built yet.
+AGENT_OPERATOR_PUBKEY = os.getenv("AGENT_OPERATOR_PUBKEY", "FCSTjYn6tKKVFCdaaA7khkiQGrQhAF7n2staJQ8bWnhA")
 
 DELIVERY_AMOUNT_SOL = float(os.getenv("DELIVERY_AMOUNT_SOL", "0.20"))
 DEADLINE_MINUTES = int(os.getenv("DEADLINE_MINUTES", "60"))

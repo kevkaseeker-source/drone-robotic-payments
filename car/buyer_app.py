@@ -195,6 +195,19 @@ def wallet():
     return jsonify({"pubkey": str(buyer_kp.pubkey()), "sol": common.get_balance_sol(str(buyer_kp.pubkey()))})
 
 
+@app.route("/operator_wallets")
+def operator_wallets():
+    """Read-only visibility into both delivery-confirmation operator wallets -
+    the RPi's existing fixed-QR one (car_main.py) and the AI agent's (not
+    built yet, see docs/superpowers/specs/2026-09-17-delivery-agent-design.md
+    - the wallet already exists so its balance is visible ahead of the agent
+    itself). Same public-data read as /wallet, no private keys involved."""
+    return jsonify({
+        "fixed": {"pubkey": common.OPERATOR_PUBKEY, "sol": common.get_balance_sol(common.OPERATOR_PUBKEY)},
+        "agent": {"pubkey": common.AGENT_OPERATOR_PUBKEY, "sol": common.get_balance_sol(common.AGENT_OPERATOR_PUBKEY)},
+    })
+
+
 @app.route("/transactions")
 def transactions():
     mine = [t for t in _tx_history if t["type"] in ("create_delivery", "cancel_delivery", "confirm_delivery")]
@@ -253,6 +266,18 @@ INDEX_HTML = """<!doctype html>
   <div class="panel">
     <div class="label">Mein Wallet</div>
     <div id="myWallet" class="mono">lädt...</div>
+  </div>
+
+  <div class="panel">
+    <div class="label">Operator-Wallets (Escrow-Release)</div>
+    <div style="margin-bottom:8px;">
+      <div style="color:#888; font-size:0.75rem;">RPi (fester QR-Code)</div>
+      <div id="fixedOperatorWallet" class="mono">lädt...</div>
+    </div>
+    <div>
+      <div style="color:#888; font-size:0.75rem;">KI-Agent</div>
+      <div id="agentOperatorWallet" class="mono">lädt...</div>
+    </div>
   </div>
 
   <div class="panel">
@@ -341,6 +366,15 @@ async function pollWallet() {
   } catch (e) {}
 }
 
+async function pollOperatorWallets() {
+  try {
+    const r = await fetch('/operator_wallets');
+    const d = await r.json();
+    document.getElementById('fixedOperatorWallet').textContent = `${d.fixed.pubkey}\\n${d.fixed.sol} SOL`;
+    document.getElementById('agentOperatorWallet').textContent = `${d.agent.pubkey}\\n${d.agent.sol} SOL`;
+  } catch (e) {}
+}
+
 async function clearHistory() {
   await fetch('/clear_history', { method: 'POST' });
   pollTx();
@@ -357,9 +391,10 @@ async function pollTx() {
   } catch (e) {}
 }
 
-pollStatus(); pollWallet(); pollTx();
+pollStatus(); pollWallet(); pollOperatorWallets(); pollTx();
 setInterval(pollStatus, 2000);
 setInterval(pollWallet, 5000);
+setInterval(pollOperatorWallets, 5000);
 setInterval(pollTx, 5000);
 </script>
 </body>

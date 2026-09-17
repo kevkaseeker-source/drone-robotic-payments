@@ -42,6 +42,19 @@ def wallet():
     return jsonify({"pubkey": common.SELLER_PUBKEY, "sol": common.get_balance_sol(common.SELLER_PUBKEY)})
 
 
+@app.route("/operator_wallets")
+def operator_wallets():
+    """Read-only visibility into both delivery-confirmation operator wallets -
+    the RPi's existing fixed-QR one (car_main.py) and the AI agent's (not
+    built yet, see docs/superpowers/specs/2026-09-17-delivery-agent-design.md
+    - the wallet already exists so its balance is visible ahead of the agent
+    itself). Same public-data read as /wallet, no private keys involved."""
+    return jsonify({
+        "fixed": {"pubkey": common.OPERATOR_PUBKEY, "sol": common.get_balance_sol(common.OPERATOR_PUBKEY)},
+        "agent": {"pubkey": common.AGENT_OPERATOR_PUBKEY, "sol": common.get_balance_sol(common.AGENT_OPERATOR_PUBKEY)},
+    })
+
+
 @app.route("/order_status")
 def order_status():
     active_order, _ = common.load_state()
@@ -161,6 +174,18 @@ INDEX_HTML = """<!doctype html>
   </div>
 
   <div class="panel">
+    <div class="label">Operator-Wallets (Escrow-Release)</div>
+    <div style="margin-bottom:8px;">
+      <div style="color:#888; font-size:0.75rem;">RPi (fester QR-Code)</div>
+      <div id="fixedOperatorWallet" class="mono">lädt...</div>
+    </div>
+    <div>
+      <div style="color:#888; font-size:0.75rem;">KI-Agent</div>
+      <div id="agentOperatorWallet" class="mono">lädt...</div>
+    </div>
+  </div>
+
+  <div class="panel">
     <div class="label">Aktuelle Order</div>
     <div id="orderStatus">— keine aktive Bestellung —</div>
   </div>
@@ -205,6 +230,15 @@ async function pollWallet() {
     const r = await fetch('/wallet');
     const d = await r.json();
     document.getElementById('ownerWallet').textContent = `${d.pubkey}\\n${d.sol} SOL`;
+  } catch (e) {}
+}
+
+async function pollOperatorWallets() {
+  try {
+    const r = await fetch('/operator_wallets');
+    const d = await r.json();
+    document.getElementById('fixedOperatorWallet').textContent = `${d.fixed.pubkey}\\n${d.fixed.sol} SOL`;
+    document.getElementById('agentOperatorWallet').textContent = `${d.agent.pubkey}\\n${d.agent.sol} SOL`;
   } catch (e) {}
 }
 
@@ -274,8 +308,9 @@ setInterval(async () => {
   } catch (e) {}
 }, 1000);
 
-pollWallet(); pollOrder(); pollTx();
+pollWallet(); pollOperatorWallets(); pollOrder(); pollTx();
 setInterval(pollWallet, 5000);
+setInterval(pollOperatorWallets, 5000);
 setInterval(pollOrder, 2000);
 setInterval(pollTx, 5000);
 </script>
