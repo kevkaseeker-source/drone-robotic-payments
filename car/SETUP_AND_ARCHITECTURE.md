@@ -574,3 +574,102 @@ commands (`printf '...\n...' > file` instead of a `cat <<EOF` heredoc for
 anything that must land correctly), keep any interactively-typed hostname
 short (hence the `ssh car` alias), or just use the MCP `run_command` tool
 instead once it's connected.
+
+## 14. On-site at Superteam Germany bootcamp (2026-09-17) — findings
+
+**The car's WiFi only knew the home network.** At the venue it had no
+connectivity at all, so none of the MCC tunnels (§13) resolved from the
+backend server. Fixed by adding the venue's WiFi as an additional
+NetworkManager profile (`nmcli connection add type wifi con-name
+'superteam-germany' ifname wlan0 ssid '<ssid>' wifi-sec.key-mgmt wpa-psk
+wifi-sec.psk '<psk>' connection.autoconnect yes`) — NetworkManager holds
+multiple saved profiles at once and auto-connects to whichever is in
+range, so this didn't touch the existing home-WiFi profile.
+
+**Venue WiFi and a personal phone hotspot both looked connected but
+passed no real traffic** — DNS resolved fine, every TCP connection timed
+out with zero response (`curl --max-time` → exit 28, no SYN-ACK, no
+RST). Two different root causes produced the identical symptom:
+- Venue WiFi: most likely device-fingerprinting/NAC quarantining an
+  unrecognized-looking MAC (Raspberry Pi's OUI) into a walled-garden
+  segment — normal client devices (phone, laptop) had no captive portal
+  and worked immediately, so it's not a portal, it's silent
+  per-device filtering. Fix requires the venue's network admin to
+  whitelist the Pi's WiFi MAC.
+- Phone hotspot: carrier-side tethering detection/throttling (common on
+  German prepaid plans — TTL-based DPI distinguishes the phone's own
+  traffic from a tethered client's and blocks/degrades the latter).
+  Confirmed by testing: the phone's own mobile data (WiFi off) browsed
+  fine, but anything connected *through* its hotspot got the same
+  DNS-ok/TCP-blocked pattern.
+
+**The actual fix: the car's own Staex M2M SIM (SIM7600G-H), independent
+of any local WiFi.** This is the fallback originally intended for this
+exact scenario (see §7) and turned out to be the right answer, not a
+side project. Two things were required to get it working:
+1. **The RPi needs its own separate, stable power source (a USB-C
+   powerbank), not shared with the PiCar-X drive/HAT battery.** With
+   power shared, the SIM7600 modem failed to enumerate at all
+   (`dmesg`: "Cannot enable. Maybe the USB cable is bad?", repeated,
+   then "unable to enumerate USB device") — a classic USB-port
+   undervoltage symptom under combined motor+modem load, not an actual
+   bad cable. `vcgencmd get_throttled` on the shared-power boot showed
+   no undervoltage flag by the time it was checked (the sticky bits
+   reset on the following reboot onto the powerbank, so this doesn't
+   retroactively prove the mechanism, but the practical fix — separate
+   power — reliably resolved it: modem enumerated cleanly every time
+   afterward). **Going forward: always run the RPi off its own
+   powerbank when field-testing away from wall power**, independent of
+   whether the drive battery is on.
+2. The PPP service (`ppp-staex-sim.service`, dials via
+   `/etc/ppp/peers/staex-sim`) was already enabled from earlier setup
+   (§7) and came up on its own once the modem enumerated — no config
+   change needed, just stable power. Once `ppp0` was up, the MCC
+   tunnels resolved and worked (`backend-server:8080` went from
+   connection-refused to real HTTP responses) — **and this is over the
+   SIM specifically, confirmed by testing while WiFi was still
+   connectivity-dead**, i.e. it genuinely is the WiFi-independent path
+   this was built for. Note the Staex M2M SIM appears to reach Staex's
+   own infrastructure directly rather than acting as a general-purpose
+   internet uplink — a plain `curl http://neverssl.com` over `ppp0`
+   still timed out even once MCC itself worked over the same interface,
+   so don't use "can it browse the open internet" as the test for
+   whether the SIM path is working; test MCC/the backend tunnel
+   directly instead.
+
+**Ethernet-cable-as-emergency-console:** with no working network at
+all, a direct Ethernet cable between a laptop and the Pi's `eth0` still
+gives IPv6 link-local SSH access (`ssh -6 -i <key>
+picarx@<fe80::...%interface-index>` — Windows needs the numeric adapter
+index appended after `%`, found via `Get-NetAdapter`; the address itself
+comes from `ping picarx.local` once, which resolves it via mDNS even
+though repeat pings/pure address-based pings are unreliable). This link
+was **very flaky when the RPi shared power with the drive battery**
+(repeated multi-second dropouts, `nmcli` showed `netplan-eth0` stuck
+`activating` — it has no DHCP server on a direct point-to-point cable,
+so it cycles retrying) and **became reliable once the RPi moved to its
+own powerbank** — another data point for "always give the RPi separate
+power in the field."
+
+**Known hardware issue: pan servo (camera) failed in the field.**
+After the pan axis was driven repeatedly into its software limit
+(±35°, enforced in `picar_server.py`'s `/camera/angle` handler) during
+button-mashing while debugging the network issue above, the servo
+degraded from "moves but overshoots/wrong-seeming direction" to "does
+not move at all" — confirmed not a software issue: commands return
+`{"ok": true, ...}` with sane requested values (checked in
+`picar-server`'s own log), the I2C bus still enumerates the Robot HAT
+normally (`i2cdetect -y 1` → device at `0x14`, unchanged), the
+servo's signal cable connector was checked and reseated with no change,
+and HAT power was confirmed on. All of that with zero physical movement
+means the servo motor/gearbox itself is mechanically dead — not
+fixable in the field, needs a replacement pan servo. **Workaround in
+use:** camera repositioned by hand to point at the delivery box and
+left alone; QR detection and ultrasonic distance don't depend on the
+camera being able to pan, so delivery confirmation is unaffected. Do
+not keep sending `/camera/angle` commands to the dead axis — the tilt
+servo is a separate unit and still works, but pan does not respond at
+all now (only the previous 20/0 "found by live testing" default, noted
+in `picar_server.py`'s own comment, is no longer valid; there's no
+current known-good pan value since the servo doesn't move to any of
+them anymore).
