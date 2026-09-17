@@ -2,6 +2,15 @@
 
 Brainstormed 2026-09-17 by Kevin Ehrentraut and Gabriel Mandtler.
 
+**Implementation status (2026-09-17):** buyer/seller wallet visibility and
+the buyer-app trigger-mode toggle are built and deployed (commits
+`caff4ab`, `15679ba`). `agent/delivery_agent.py` itself (the actual Claude
+tool-use loop) is not built yet - selecting "KI-Agent" today creates a
+real, funded order that nothing currently confirms, refundable after the
+deadline. See also Gabriel Mandtler's 2026-09-17 code review, which found
+several issues in the underlying Anchor program unrelated to this spec -
+tracked separately, not part of this document.
+
 ## Research question
 
 RoboPay Unit C currently triggers escrow release with a **deterministic,
