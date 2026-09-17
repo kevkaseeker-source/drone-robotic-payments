@@ -47,18 +47,18 @@ def _load_keypair(path: str) -> Keypair:
 buyer_kp = _load_keypair(BUYER_KEYPAIR_PATH)
 
 
-def create_delivery(lat: float, lon: float) -> str:
+def create_delivery(lat: float, lon: float, operator_pubkey) -> str:
     amount_lamports = int(common.DELIVERY_AMOUNT_SOL * 1_000_000_000)
     deadline = int(time.time()) + common.DEADLINE_MINUTES * 60
     data = (CREATE_DELIVERY_DISC
             + struct.pack("<Qqqq", amount_lamports, int(lat * 1e7), int(lon * 1e7), deadline))
-    escrow_pda = common.derive_escrow_pda()
+    escrow_pda = common.derive_escrow_pda(operator_pubkey)
     seller_pubkey = common.Pubkey.from_string(common.SELLER_PUBKEY)
     accounts = [
         AccountMeta(pubkey=escrow_pda, is_signer=False, is_writable=True),
         AccountMeta(pubkey=buyer_kp.pubkey(), is_signer=True, is_writable=True),
         AccountMeta(pubkey=seller_pubkey, is_signer=False, is_writable=False),
-        AccountMeta(pubkey=common.operator_pubkey, is_signer=False, is_writable=False),
+        AccountMeta(pubkey=operator_pubkey, is_signer=False, is_writable=False),
         AccountMeta(pubkey=SYSTEM_PROGRAM_ID, is_signer=False, is_writable=False),
     ]
     ix = Instruction(program_id=common.program_id, accounts=accounts, data=data)
@@ -68,8 +68,8 @@ def create_delivery(lat: float, lon: float) -> str:
     return str(common.rpc.send_transaction(tx).value)
 
 
-def cancel_delivery() -> str:
-    escrow_pda = common.derive_escrow_pda()
+def cancel_delivery(operator_pubkey) -> str:
+    escrow_pda = common.derive_escrow_pda(operator_pubkey)
     accounts = [
         AccountMeta(pubkey=escrow_pda, is_signer=False, is_writable=True),
         AccountMeta(pubkey=buyer_kp.pubkey(), is_signer=True, is_writable=True),
@@ -79,6 +79,10 @@ def cancel_delivery() -> str:
     msg = Message.new_with_blockhash([ix], buyer_kp.pubkey(), blockhash)
     tx = Transaction([buyer_kp], msg, blockhash)
     return str(common.rpc.send_transaction(tx).value)
+
+
+def _operator_for_mode(trigger_mode: str):
+    return common.agent_operator_pubkey if trigger_mode == "agent" else common.operator_pubkey
 
 
 _active_order, _tx_history = common.load_state()
@@ -110,13 +114,15 @@ def place_order():
     body = request.get_json(silent=True) or {}
     lat = float(body.get("lat", common.TARGET_LAT))
     lon = float(body.get("lon", common.TARGET_LON))
+    trigger_mode = body.get("trigger_mode") if body.get("trigger_mode") in ("fixed", "agent") else "fixed"
     try:
-        sig = create_delivery(lat, lon)
+        sig = create_delivery(lat, lon, _operator_for_mode(trigger_mode))
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
     _active_order = {
         "lat": lat, "lon": lon, "buyer_pubkey": str(buyer_kp.pubkey()),
         "escrow_tx": sig, "status": "pending", "delivery_tx": None, "ordered_at": time.time(),
+        "trigger_mode": trigger_mode,
     }
     _force_delivery = False
     _tx_history.append({"type": "create_delivery", "sig": sig, "t": time.time()})
@@ -172,8 +178,9 @@ def reset_order():
 @app.route("/cancel", methods=["POST"])
 def cancel_order():
     global _active_order
+    trigger_mode = (_active_order or {}).get("trigger_mode", "fixed")
     try:
-        sig = cancel_delivery()
+        sig = cancel_delivery(_operator_for_mode(trigger_mode))
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
     _tx_history.append({"type": "cancel_delivery", "sig": sig, "t": time.time()})
@@ -254,6 +261,15 @@ INDEX_HTML = """<!doctype html>
 
   <div class="panel">
     <div class="label">Bestellen</div>
+    <div style="margin-bottom:12px;">
+      <label style="display:block; margin-bottom:6px; cursor:pointer;">
+        <input type="radio" name="triggerMode" value="fixed" checked onchange="updateModeHint()"> Fester QR-Code
+      </label>
+      <label style="display:block; cursor:pointer;">
+        <input type="radio" name="triggerMode" value="agent" onchange="updateModeHint()"> KI-Agent
+      </label>
+      <div id="modeHint" style="margin-top:6px; color:#888; font-size:0.8rem;"></div>
+    </div>
     <button id="orderBtn" onclick="placeOrder()">SOL ins Escrow einzahlen (0.20 SOL)</button>
     <div id="orderResult" style="margin-top:12px;"></div>
   </div>
@@ -295,12 +311,21 @@ const TX_LABELS = {
   confirm_delivery: 'Escrow-Release TX (Auszahlung)',
 };
 
+function updateModeHint() {
+  const mode = document.querySelector('input[name="triggerMode"]:checked').value;
+  const hint = document.getElementById('modeHint');
+  hint.textContent = mode === 'agent'
+    ? 'Hinweis: Der KI-Agent ist noch nicht gebaut - diese Bestellung wird aktuell von niemandem automatisch bestätigt. Nach Ablauf der Frist per "Stornieren" rückerstattbar.'
+    : '';
+}
+
 async function placeOrder() {
   const btn = document.getElementById('orderBtn');
+  const mode = document.querySelector('input[name="triggerMode"]:checked').value;
   btn.disabled = true;
   btn.textContent = 'sende Transaktion...';
   try {
-    const r = await fetch('/order', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+    const r = await fetch('/order', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({trigger_mode: mode}) });
     const d = await r.json();
     if (d.success) {
       document.getElementById('orderResult').innerHTML =
@@ -329,7 +354,8 @@ async function pollStatus() {
       btn.disabled = false; btn.textContent = 'SOL ins Escrow einzahlen (0.20 SOL)';
     } else {
       const cls = d.status === 'delivered' ? 'status-delivered' : 'status-pending';
-      el.innerHTML = `<span class="${cls}">${d.status}</span>`;
+      const modeLabel = d.trigger_mode === 'agent' ? 'KI-Agent' : 'Fester QR-Code';
+      el.innerHTML = `<span class="${cls}">${d.status}</span> <span style="color:#888;">(${modeLabel})</span>`;
       if (d.status === 'delivered') {
         // Delivered doesn't block a new order (see place_order() server-side) -
         // only keep the button disabled while something is actually pending.

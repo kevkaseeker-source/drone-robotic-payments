@@ -60,14 +60,19 @@ TX_LABELS = {
 rpc = Client(SOLANA_RPC_URL)
 program_id = Pubkey.from_string(PROGRAM_ID)
 operator_pubkey = Pubkey.from_string(OPERATOR_PUBKEY)
+agent_operator_pubkey = Pubkey.from_string(AGENT_OPERATOR_PUBKEY)
 
 
 def disc(name: str) -> bytes:
     return hashlib.sha256(f"global:{name}".encode()).digest()[:8]
 
 
-def derive_escrow_pda() -> Pubkey:
-    pda, _ = Pubkey.find_program_address([b"escrow", bytes(operator_pubkey)], program_id)
+def derive_escrow_pda(operator: Pubkey = None) -> Pubkey:
+    """The escrow PDA is per-operator (seeds include the operator pubkey) -
+    defaults to the fixed-QR operator for backward compatibility, but pass
+    agent_operator_pubkey to get the AI agent's separate escrow slot."""
+    op = operator or operator_pubkey
+    pda, _ = Pubkey.find_program_address([b"escrow", bytes(op)], program_id)
     return pda
 
 

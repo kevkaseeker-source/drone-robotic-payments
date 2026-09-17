@@ -137,6 +137,13 @@ def fetch_order():
         data = r.json()
         if data.get("status") == "no_order":
             return None
+        # Buyer app now lets the buyer pick "fixed" (this script) or "agent"
+        # (delivery_agent.py, see docs/superpowers/specs/2026-09-17-delivery-
+        # agent-design.md) per order - both poll the same /active_order, so
+        # this script must ignore anything not meant for it and keep waiting,
+        # exactly like "no order yet". Missing field = pre-toggle order = ours.
+        if data.get("trigger_mode", "fixed") != "fixed":
+            return None
         return data
     except Exception as e:
         log.warning("Could not reach PC server: %s", e)
