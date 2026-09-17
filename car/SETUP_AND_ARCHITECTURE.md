@@ -673,3 +673,78 @@ all now (only the previous 20/0 "found by live testing" default, noted
 in `picar_server.py`'s own comment, is no longer valid; there's no
 current known-good pan value since the servo doesn't move to any of
 them anymore).
+
+## 15. First real end-to-end delivery test (2026-09-17) — two bugs found and fixed
+
+With the car back on its own powerbank and the venue-WiFi/SIM path (§14)
+working, ran the actual full flow for the first time since the
+buyer/seller split (§11): order via the buyer app, hold the box QR up
+to the camera, watch for `confirm_delivery` on-chain.
+
+**Bug 1 — `car_main.py` still pointed at a dead home-network IP.**
+`car-trigger.service`'s `PC_SERVER_URL` was `http://192.168.178.61:5000`
+— the old home-LAN address of the original combined `order_app_pc.py`,
+from before the buyer/seller split. It was never updated when
+`buyer_app.py` replaced it, so `car_main.py` had been silently retrying
+`/active_order` against an unreachable address ever since — the buyer
+app itself worked fine, but the car could never see that an order
+existed. Symptom: buyer app shows an order, camera correctly reads the
+QR (confirmed via `/seller/proxy/camera/qr` directly), but nothing
+happens — `car-trigger`'s own log was the only place this was visible
+(`Could not reach PC server: ... 192.168.178.61 ... Connection timed
+out`). Fixed by pointing it at the real public buyer app instead:
+`Environment=PC_SERVER_URL=https://RoboPay:MoboPay@robopay.staexhosting.com/buyer`
+— the Basic Auth userinfo in the URL isn't actually required (the
+`/active_order`, `/delivered`, `/force_delivery`, `/rpi_log` paths
+`car_main.py` calls are all in `buyer_app.py`'s `exempt_paths`, see
+§11), but doesn't hurt as a safety net if that ever changes. Also
+matters that this URL goes through the gateway (§13) with the `/buyer`
+prefix — the gateway strips it before forwarding, so `buyer_app.py`
+still sees the plain `/active_order` etc. paths it expects.
+
+**Bug 2 — escrow account never gets closed after a successful
+delivery, blocking the next order.** The `DeliveryEscrow` PDA is
+one-per-operator (§ program design) and `confirm_delivery` only sets
+`status = DELIVERED` — it doesn't close the account. The very next
+`create_delivery` then fails with `Allocate: account Address {...}
+already in use`, because the old (delivered but unclosed) account is
+still sitting on that same PDA. Hit this twice in a row during this
+test session before the pattern was obvious. Diagnosed by decoding the
+escrow account's raw bytes by hand against the `DeliveryEscrow` struct
+layout in `anchor/programs/drone-delivery/src/lib.rs` (`buyer`,
+`seller`, `drone_operator`: `Pubkey` × 3, then `amount`: `u64`,
+`target_lat`/`target_lon`/`deadline`: `i64` × 3, `status`: `u8`,
+`bump`: `u8` — 138 bytes total including the 8-byte Anchor
+discriminator) — `getAccountInfo` on the PDA plus this layout tells you
+definitively whether a stuck account is `PENDING` (0), `DELIVERED` (1),
+or `CANCELLED` (2) without needing any additional tooling. **Fixed
+properly, not just patched around:** `car_main.py`'s `_confirm()` now
+calls `solana.close_escrow()` (the method already existed in
+`rpi/solana_client.py`, just was never called from the Unit C trigger
+loop) right after a successful `confirm_delivery`, wrapped in its own
+try/except so a close failure never masks the fact that the actual
+payment already succeeded — it only affects being ready for the next
+order, not this one's outcome.
+
+**One-off manual recovery command** (for if a stuck escrow ever needs
+clearing by hand again, e.g. from a test that crashed before the new
+auto-close ran): build and send a bare `close_escrow` instruction
+(8-byte Anchor discriminator `sha256("global:close_escrow")[:8]`, two
+accounts: the escrow PDA as writable non-signer, the drone operator
+keypair as writable signer) using
+`WALLET_KEYPAIR_PATH` from `car-trigger.service`
+(`/home/picarx/.config/solana/picarx_operator.json`) — run it directly
+on the car (venv already has `solders`/`requests`), never copy that
+keypair off the device.
+
+**Practical note on remote access during this session:** both the MCP
+connection and the `staexhosting.com` browser dashboard were
+intermittently unusable for several minutes at a time (MCP: "Unexpected
+content type: null" on every call; dashboard: loads but renders a blank
+white page, reproduced in a fresh incognito window too, so not a
+cache/extension issue — likely the same underlying platform hiccup
+surfacing two ways). The direct Ethernet-cable link-local SSH path
+(§14) kept working as a fallback throughout, including for writing
+`car_main.py`'s fix directly onto the RPi when MCP was down for a
+period. Confirms the fallback is worth keeping documented and ready,
+not just a one-time debugging trick.

@@ -245,6 +245,17 @@ def _confirm(solana, dry_run, lat, lon, order_id):
     except RuntimeError as e:
         log.error("TX fehlgeschlagen: %s", e)
         send_log(f"TX FEHLER: {e}")
+        return
+
+    # The escrow PDA is one-per-operator and stays allocated (status=DELIVERED)
+    # until explicitly closed - without this, the next create_delivery fails
+    # with "already in use" (hit this 2026-09-17 during live testing: had to
+    # close it by hand twice before realizing it needs to happen every time).
+    try:
+        close_sig = solana.close_escrow()
+        log.info("Escrow closed, ready for next order: %s", close_sig)
+    except Exception as e:
+        log.warning("close_escrow failed (payment already succeeded, just cleanup): %s", e)
 
 
 if __name__ == "__main__":
