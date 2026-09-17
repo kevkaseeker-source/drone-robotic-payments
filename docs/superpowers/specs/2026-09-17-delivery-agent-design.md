@@ -110,6 +110,26 @@ QR-Code"** (today's behavior, default) and **"KI-Agent"**.
   running one QR-mode and one Agent-mode order concurrently is a
   possible future extension, not needed for the first comparison.
 
+## Seller/owner app: show both operator wallets
+
+`car/seller_app.py`'s `/wallet` currently shows only the payout wallet
+(`SELLER_PUBKEY`, the PiCarOwner) — there's no visibility into either
+operator wallet at all today. Once there are two operator wallets
+(fixed-QR's existing one, the agent's new one), Kevin wants to be able
+to tell them apart in this app, not just infer it from which path fired.
+
+- `/wallet` response gains two more read-only entries: the fixed-QR
+  operator's pubkey + balance, and the agent operator's pubkey +
+  balance (both already public info — reads the same way
+  `get_balance_sol()` already reads `SELLER_PUBKEY`, no new capability,
+  no private keys touched)
+- The order status / transaction views also show which `trigger_mode`
+  the active or most recent order used, so it's visible which wallet
+  is "live" for what's currently happening — not just three balances
+  with no way to tell which one is relevant right now
+- Still fully read-only, matching this app's existing "never touches
+  private keys" design — same as the rest of `seller_app.py`
+
 ## Wallet / funding
 
 New, dedicated **agent operator keypair**, generated fresh (not reusing
@@ -139,6 +159,6 @@ judgment, reasoning trace — is the actual research output.
   agent first, decide PiCarX placement afterward.
 - Running both trigger modes concurrently (one shared "slot" for now,
   see § Buyer app).
-- Any change to `seller_app.py` or the Anchor program itself — neither
-  needs to change for this spec. `car_main.py` and `buyer_app.py` do
-  get the small, specific changes described above, not a rewrite.
+- Any change to the Anchor program itself — not needed for this spec.
+  `car_main.py`, `buyer_app.py`, and `seller_app.py` get the small,
+  specific changes described above, not a rewrite.
